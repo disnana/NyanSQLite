@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nanasqlite"
+name = "nyansqlite"
 dynamic = ["version"]
 description = "A dict-like SQLite wrapper with APSW for instant persistence and memory caching"
 readme = "README.md"
