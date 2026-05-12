@@ -11,8 +11,8 @@ import tempfile
 import threading
 import time
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import ForeignKeyHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import ForeignKeyHook
 
 
 def test_foreign_key_hook_race():

@@ -182,7 +182,7 @@ gantt
 
 - [CHANGELOG.md](../../CHANGELOG.md) - 変更履歴
 - [README.md](../../README.md) - プロジェクト概要
-- [src/nanasqlite/core.py](../../src/nanasqlite/core.py) - メイン実装
+- [src/nanasqlite/core.py](../../src/nyansqlite/core.py) - メイン実装
 
 ---
 

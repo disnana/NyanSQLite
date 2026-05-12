@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from quart import Quart, jsonify, redirect, render_template_string, request, url_for
 
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 app = Quart(__name__)
 DB_PATH = "quart_todo_clean.db"

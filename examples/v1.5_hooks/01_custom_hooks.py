@@ -14,8 +14,8 @@ v1.5.0dev1で導入された「Ultimate Hooks」機能の基盤となるのが `
 import time
 from typing import Any
 
-from nanasqlite import NanaSQLite
-from nanasqlite.protocols import NanaHook
+from nyansqlite import NanaSQLite
+from nyansqlite.protocols import NanaHook
 
 # ==============================================================================
 # 1. カスタムフックの定義

@@ -10,7 +10,7 @@ import asyncio
 import os
 import tempfile
 
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 
 async def main():

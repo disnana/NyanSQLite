@@ -11,7 +11,7 @@ import os
 import tempfile
 import threading
 
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

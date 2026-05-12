@@ -1,15 +1,15 @@
 import io
 import logging
 
-from nanasqlite.core import NanaSQLite
+from nyansqlite.core import NanaSQLite
 
 
 def main():
     # Setup logging capture
     log_output = io.StringIO()
     handler = logging.StreamHandler(log_output)
-    logging.getLogger("nanasqlite.v2_engine").addHandler(handler)
-    logging.getLogger("nanasqlite.v2_engine").setLevel(logging.ERROR)
+    logging.getLogger("nyansqlite.v2_engine").addHandler(handler)
+    logging.getLogger("nyansqlite.v2_engine").setLevel(logging.ERROR)
 
     db = NanaSQLite("f004_test.db", v2_mode=True)
 

@@ -446,7 +446,7 @@
 - **[Low] QUAL-09**: `utils.py` の `list(dict.keys())` を `list(dict)` に変更し、不要な `.keys()` 呼び出しを削除しました（SonarCloud指摘対応）。
 - **[Low] QUAL-10 (新機能)**: `V2Config` データクラスを追加し、v2関連パラメータ（`flush_mode`, `flush_interval`, `flush_count`, `chunk_size`, `enable_metrics`）をひとまとめにして渡せるようにしました。既存の個別引数は後方互換のためすべて維持されます。SonarCloud の「パラメータが多すぎる（brain-overload）」警告への対応です。
   ```python
-  from nanasqlite import NanaSQLite, V2Config
+  from nyansqlite import NanaSQLite, V2Config
   cfg = V2Config(flush_mode="time", flush_interval=5.0, enable_metrics=True)
   db = NanaSQLite("mydata.db", v2_mode=True, v2_config=cfg)
   ```
@@ -1673,7 +1673,7 @@ Fixed performance regressions observed in RPI benchmarks that appeared starting 
 - **[Low] QUAL-09**: Removed unnecessary `.keys()` calls in `utils.py` (`list(dict.keys())` → `list(dict)`) to address SonarCloud code smell warnings.
 - **[Low] QUAL-10 (New Feature)**: Introduced `V2Config` dataclass to group v2-related parameters (`flush_mode`, `flush_interval`, `flush_count`, `chunk_size`, `enable_metrics`) into a single object. All existing individual parameters remain available for full backward compatibility. This addresses SonarCloud's "brain-overload" warning for the `__init__` method having too many parameters.
   ```python
-  from nanasqlite import NanaSQLite, V2Config
+  from nyansqlite import NanaSQLite, V2Config
   cfg = V2Config(flush_mode="time", flush_interval=5.0, enable_metrics=True)
   db = NanaSQLite("mydata.db", v2_mode=True, v2_config=cfg)
   ```

@@ -17,7 +17,7 @@ import os
 import tempfile
 import warnings
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

@@ -1,6 +1,6 @@
 import time
 
-from nanasqlite.utils import ExpirationMode, ExpiringDict
+from nyansqlite.utils import ExpirationMode, ExpiringDict
 
 
 def main():

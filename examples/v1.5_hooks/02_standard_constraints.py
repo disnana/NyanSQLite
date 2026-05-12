@@ -13,9 +13,9 @@ NanaSQLite v1.5.0dev1 では、よく使われる RDBMS（リレーショナル�
 
 from typing import Any
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
-from nanasqlite.hooks import CheckHook, ForeignKeyHook, UniqueHook
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite.hooks import CheckHook, ForeignKeyHook, UniqueHook
 
 
 def main():

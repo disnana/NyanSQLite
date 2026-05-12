@@ -14,8 +14,8 @@ SEC-01 [Medium] exists() の where 句が _validate_expression() を経由しな
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

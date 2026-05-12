@@ -11,7 +11,7 @@
 ```bash
 # リポジトリをクローン
 git clone https://github.com/disnana/nanasqlite.git
-cd nanasqlite
+cd nyansqlite
 
 # 開発モードでインストール
 pip install -e ".[dev]"
@@ -37,7 +37,7 @@ pytest tests/ -v
 #### バージョン更新例
 
 ```python
-# src/nanasqlite/__init__.py
+# src/nyansqlite/__init__.py
 
 # 開発中
 __version__ = "1.1.0dev"
@@ -89,7 +89,7 @@ mainブランチにpushすると：
 ```bash
 # Clone repository
 git clone https://github.com/disnana/nanasqlite.git
-cd nanasqlite
+cd nyansqlite
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -115,7 +115,7 @@ Version is managed in `src/nanasqlite/__init__.py` via `__version__`.
 #### Version Update Examples
 
 ```python
-# src/nanasqlite/__init__.py
+# src/nyansqlite/__init__.py
 
 # During development
 __version__ = "1.1.0dev"

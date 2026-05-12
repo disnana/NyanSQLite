@@ -8,8 +8,8 @@ BUG-02 [Medium] batch_update() の non-coerce パスでフック返り値が破�
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import BaseHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import BaseHook
 
 
 class UpperCaseHook(BaseHook):

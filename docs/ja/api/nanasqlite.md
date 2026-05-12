@@ -631,20 +631,20 @@ print(db["user"])  # {'name': 'Nana'}
 
 **インストール:**
 ```bash
-pip install nanasqlite[validation]
+pip install nyansqlite[validation]
 ```
 
 ### 基本的な使い方
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int().range(0, 150)}
 db = NanaSQLite("mydata.db", validator=schema)
 
-db["user"] = {"name": "Alice", "age": 30}        # OK
-db["user"] = {"name": "Bob", "age": "invalid"}   # → NanaSQLiteValidationError
+db["user"] = {"name": "Alice", "age": 30}  # OK
+db["user"] = {"name": "Bob", "age": "invalid"}  # → NanaSQLiteValidationError
 ```
 
 ### 自動変換（coerce）
@@ -659,7 +659,7 @@ db["user"] = {"name": "Bob", "age": "invalid"}   # → NanaSQLiteValidationError
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 # 正しい使い方: フィールドに .coerce() + NanaSQLite に coerce=True
 schema = {"age": v.int().coerce(), "score": v.float().coerce()}
@@ -678,7 +678,7 @@ db_bad["user"] = {"age": "30"}  # → NanaSQLiteValidationError（型不一致�
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 user_schema = {"name": v.str(), "age": v.int()}
 score_schema = {"player": v.str(), "score": v.float().range(0.0, 100.0)}
@@ -691,8 +691,8 @@ scores_db = db.table("scores", validator=score_schema)
 
 # 親からスキーマを継承したい場合
 db2 = NanaSQLite("app2.db", validator=user_schema)
-child_db = db2.table("users2")         # 親のスキーマを自動継承
-free_db  = db2.table("cache", validator=None)  # バリデーション無効化
+child_db = db2.table("users2")  # 親のスキーマを自動継承
+free_db = db2.table("cache", validator=None)  # バリデーション無効化
 
 # テーブルごとに coerce を設定（フィールドに .coerce() が必要）
 coerce_schema = {"age": v.int().coerce()}
@@ -706,7 +706,7 @@ coerce_db["u1"] = {"age": "30"}  # {"age": 30} として保存
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("batch.db", validator=schema)
@@ -723,7 +723,7 @@ except NanaSQLiteValidationError:
 ### 機能フラグの確認
 
 ```python
-from nanasqlite import HAS_VALIDKIT
+from nyansqlite import HAS_VALIDKIT
 
 if HAS_VALIDKIT:
     print("validkit-py が利用可能です")
@@ -734,7 +734,7 @@ else:
 ### バリデーションエラーの処理
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 from validkit import v
 
 schema = {"name": v.str(), "score": v.int().range(0, 100)}

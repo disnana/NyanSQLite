@@ -257,10 +257,12 @@ def save_user(db: NanaSQLite, user_data: dict) -> bool:
 ### Webアプリケーション用の接続プーリング
 
 **FastAPIの例**
+
 ```python
 from fastapi import FastAPI, Depends
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -270,11 +272,14 @@ async def lifespan(app: FastAPI):
     # シャットダウン: データベースをクローズ
     await app.state.db.close()
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 async def get_db() -> AsyncNanaSQLite:
     """データベースの依存性注入"""
     return app.state.db
+
 
 @app.get("/users/{user_id}")
 async def get_user(user_id: str, db: AsyncNanaSQLite = Depends(get_db)):
@@ -389,14 +394,16 @@ with NanaSQLite("app.db") as db:
 ```python
 import schedule
 import time
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("production.db")
+
 
 def daily_backup():
     from datetime import date
     db.backup(f"backups/production_{date.today()}.db")
     print(f"バックアップ完了: {date.today()}")
+
 
 schedule.every().day.at("02:00").do(daily_backup)
 

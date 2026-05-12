@@ -8,7 +8,7 @@ db["k"] = None で格納した値が batch_get() で返されない。
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

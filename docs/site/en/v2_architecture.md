@@ -30,11 +30,11 @@ Application
 ## Enabling V2
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite(
     "app.db",
-    v2_mode=True,           # Enable V2 engine
+    v2_mode=True,  # Enable V2 engine
     flush_mode="immediate",  # Flush mode
 )
 ```
@@ -165,7 +165,7 @@ print(f"DLQ Count: {metrics['dlq_count']}")
 You can enqueue custom tasks into the Strict lane:
 
 ```python
-from nanasqlite.v2_engine import StrictTask
+from nyansqlite.v2_engine import StrictTask
 
 # Enqueue a task with priority
 task = StrictTask(
@@ -196,7 +196,8 @@ db._v2_engine.enqueue_strict_task(task)
 V2 mode also works with `AsyncNanaSQLite`:
 
 ```python
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     db = AsyncNanaSQLite(

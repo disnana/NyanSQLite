@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 
 # Pydantic models for request/response

@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db_path = "test_sqli.db"
 if os.path.exists(db_path):

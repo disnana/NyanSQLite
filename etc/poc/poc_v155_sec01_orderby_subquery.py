@@ -18,7 +18,7 @@ and raises ValueError / issues UserWarning accordingly.
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 _fd, path = tempfile.mkstemp(suffix=".db")
 os.close(_fd)

@@ -23,7 +23,7 @@ NanaSQLite v1.1.0+ provides unified custom exception classes to make error handl
 Base class for all NanaSQLite-specific exceptions.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -45,7 +45,7 @@ Raised for invalid input values or parameters.
 - validkit-py schema violations (when `validator` is specified)
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 db = NanaSQLite("mydata.db")
 
@@ -57,9 +57,10 @@ except NanaSQLiteValidationError as e:
 ```
 
 **Example — validkit-py schema violation:**
+
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("mydata.db", validator=schema)
@@ -84,7 +85,7 @@ Wraps SQLite/APSW database operation errors.
 - SQL syntax errors
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 db = NanaSQLite("mydata.db")
 
@@ -108,7 +109,7 @@ Transaction-related errors.
 - Closing connection during transaction
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 db = NanaSQLite("mydata.db")
 
@@ -129,7 +130,7 @@ Connection creation or management errors.
 - Using orphaned child instance
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteConnectionError
+from nyansqlite import NanaSQLite, NanaSQLiteConnectionError
 
 db = NanaSQLite("mydata.db")
 db.close()
@@ -149,7 +150,7 @@ Raised when the internal lock cannot be acquired within the specified `lock_time
 - Lock contention or deadlock-like situations causing a timeout in multithreaded applications
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteLockError
+from nyansqlite import NanaSQLite, NanaSQLiteLockError
 
 db = NanaSQLite("mydata.db", lock_timeout=2.0)
 
@@ -168,7 +169,7 @@ Subclass of `NanaSQLiteConnectionError`. Raised when performing operations on a 
 - Using a child instance (`.table()`) after the parent connection has been closed
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteClosedError
+from nyansqlite import NanaSQLite, NanaSQLiteClosedError
 
 db = NanaSQLite("mydata.db")
 db.close()
@@ -202,7 +203,7 @@ Exception
 Since all NanaSQLite exceptions inherit from `NanaSQLiteError`, you can catch all of them:
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -224,7 +225,7 @@ except NanaSQLiteError as e:
 **Problem**: Multiple processes or threads accessing the database simultaneously.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 db = NanaSQLite("mydata.db")
 
@@ -251,7 +252,7 @@ db.pragma("busy_timeout", 5000)  # Wait 5 seconds
 **Problem**: SQLite doesn't support nested transactions.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 db = NanaSQLite("mydata.db")
 
@@ -280,7 +281,7 @@ with db.transaction():
 **Problem**: Attempting operations after closing the connection.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteConnectionError
+from nyansqlite import NanaSQLite, NanaSQLiteConnectionError
 
 db = NanaSQLite("mydata.db")
 db.close()
@@ -347,7 +348,7 @@ db.create_table("my_table", {"id": "INTEGER"})
 ### 1. Catch Specific Exceptions
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLite,
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,
@@ -388,7 +389,7 @@ finally:
 ### 3. Use Transactions for Consistency
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 db = NanaSQLite("mydata.db")
 
@@ -408,7 +409,7 @@ except NanaSQLiteError as e:
 
 ```python
 import logging
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -426,7 +427,8 @@ except NanaSQLiteError as e:
 Hide technical details and provide user-friendly messages.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError, NanaSQLiteDatabaseError
+
 
 def save_user_data(user_data):
     try:
@@ -457,7 +459,7 @@ def save_user_data(user_data):
 `NanaSQLiteDatabaseError` holds the original APSW error.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -515,7 +517,7 @@ PYTHONVERBOSE=1 python your_script.py
 
 ```python
 import traceback
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -533,7 +535,8 @@ The async version (`AsyncNanaSQLite`) uses the same exception classes:
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite, NanaSQLiteError
+from nyansqlite import AsyncNanaSQLite, NanaSQLiteError
+
 
 async def main():
     try:
@@ -541,6 +544,7 @@ async def main():
             await db.aset("key", "value")
     except NanaSQLiteError as e:
         print(f"Error: {e}")
+
 
 asyncio.run(main())
 ```

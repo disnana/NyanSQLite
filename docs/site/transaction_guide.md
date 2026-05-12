@@ -41,7 +41,7 @@ NanaSQLiteは、SQLiteのトランザクション機能を簡単に使用でき�
 `begin_transaction()`, `commit()`, `rollback()`を使用して、トランザクションを明示的に制御できます。
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("mydata.db")
 db.create_table("accounts", {
@@ -57,15 +57,15 @@ try:
     # 複数の操作を実行
     db.sql_insert("accounts", {"id": 1, "name": "Alice", "balance": 1000.0})
     db.sql_insert("accounts", {"id": 2, "name": "Bob", "balance": 500.0})
-    
+
     # 口座Aから口座Bへ送金
     db.sql_update("accounts", {"balance": 900.0}, "id = ?", (1,))
     db.sql_update("accounts", {"balance": 600.0}, "id = ?", (2,))
-    
+
     # すべて成功したらコミット
     db.commit()
     print("送金が完了しました")
-    
+
 except Exception as e:
     # エラーが発生したらロールバック
     db.rollback()
@@ -95,7 +95,7 @@ print(db.in_transaction())  # False
 ### 基本的な使用
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("mydata.db")
 db.create_table("users", {
@@ -118,7 +118,7 @@ print("ユーザーが追加されました")
 コンテキストマネージャ内で例外が発生すると、自動的にロールバックされます。
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("mydata.db")
 db.create_table("products", {
@@ -131,10 +131,10 @@ try:
     with db.transaction():
         db.sql_insert("products", {"id": 1, "name": "Laptop", "price": 999.99})
         db.sql_insert("products", {"id": 2, "name": "Mouse", "price": 19.99})
-        
+
         # 意図的にエラーを発生させる（重複キー）
         db.sql_insert("products", {"id": 1, "name": "Duplicate", "price": 0.0})
-        
+
 except Exception as e:
     print(f"エラーが発生しました: {e}")
     # トランザクションは自動的にロールバックされている
@@ -146,14 +146,14 @@ print(f"商品数: {db.count('products')}")  # 0
 ### ネストしたコンテキスト
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("mydata.db")
 
 # 外側のトランザクション
 with db.transaction():
     db["key1"] = "value1"
-    
+
     # 内側のトランザクションは開始できない（エラーになる）
     try:
         with db.transaction():  # NanaSQLiteTransactionError
@@ -219,7 +219,7 @@ print(f"Journal mode: {mode}")  # "wal"
 ### トランザクション関連の例外
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 db = NanaSQLite("mydata.db")
 
@@ -247,7 +247,7 @@ except NanaSQLiteTransactionError as e:
 ### トランザクション中の接続クローズ
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 db = NanaSQLite("mydata.db")
 
@@ -264,7 +264,7 @@ except NanaSQLiteTransactionError as e:
 ### 安全なエラーハンドリング
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 db = NanaSQLite("mydata.db")
 db.create_table("logs", {
@@ -272,6 +272,7 @@ db.create_table("logs", {
     "message": "TEXT",
     "timestamp": "TEXT"
 })
+
 
 def safe_transaction():
     try:
@@ -290,9 +291,11 @@ def safe_transaction():
         print(f"予期しないエラー: {e}")
         return None
 
+
 def perform_operation():
     # 実際の処理
     return "success"
+
 
 result = safe_transaction()
 ```
@@ -307,7 +310,7 @@ result = safe_transaction()
 
 ```python
 import time
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("test.db")
 db.create_table("items", {"id": "INTEGER", "value": "TEXT"})
@@ -337,7 +340,7 @@ print(f"速度向上: {elapsed_without / elapsed_with:.1f}倍")
 `batch_update()`は内部的にトランザクションを使用しているため、さらに高速です。
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("test.db")
 
@@ -356,7 +359,7 @@ db.batch_update(data)
 大量のデータを処理する場合、トランザクションを適切なサイズに分割すると効果的です。
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("large.db")
 db.create_table("data", {"id": "INTEGER", "value": "TEXT"})
@@ -462,7 +465,8 @@ with db2.transaction():
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     async with AsyncNanaSQLite("mydata.db") as db:
@@ -471,8 +475,9 @@ async def main():
             await db.aset("key1", "value1")
             await db.aset("key2", "value2")
             # 自動的にコミット
-        
+
         print("トランザクション完了")
+
 
 asyncio.run(main())
 ```
@@ -481,12 +486,13 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     async with AsyncNanaSQLite("mydata.db") as db:
         await db.begin_transaction()
-        
+
         try:
             await db.aset("key1", "value1")
             await db.aset("key2", "value2")
@@ -495,6 +501,7 @@ async def main():
             await db.rollback()
             print(f"エラー: {e}")
 
+
 asyncio.run(main())
 ```
 
@@ -502,17 +509,19 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     async with AsyncNanaSQLite("mydata.db") as db:
         print(await db.in_transaction())  # False
-        
+
         await db.begin_transaction()
         print(await db.in_transaction())  # True
-        
+
         await db.commit()
         print(await db.in_transaction())  # False
+
 
 asyncio.run(main())
 ```
@@ -523,7 +532,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     async with AsyncNanaSQLite("mydata.db") as db:
@@ -532,16 +542,17 @@ async def main():
             async with db.transaction():
                 await db.aset("key1", "value1")
                 await asyncio.sleep(1)
-        
+
         async def task2():
             async with db.transaction():  # task1のトランザクション中
                 await db.aset("key2", "value2")
-        
+
         # 同時実行はエラーになる
         try:
             await asyncio.gather(task1(), task2())
         except Exception as e:
             print(f"エラー: {e}")
+
 
 asyncio.run(main())
 ```
@@ -555,7 +566,7 @@ asyncio.run(main())
 ### 例1: 銀行口座の送金
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 db = NanaSQLite("bank.db")
 db.create_table("accounts", {
@@ -563,6 +574,7 @@ db.create_table("accounts", {
     "name": "TEXT",
     "balance": "REAL"
 })
+
 
 def transfer(from_id: int, to_id: int, amount: float):
     """口座間で送金を行う"""
@@ -572,39 +584,40 @@ def transfer(from_id: int, to_id: int, amount: float):
             from_account = db.query("accounts", where="id = ?", parameters=(from_id,))
             if not from_account:
                 raise ValueError(f"口座 {from_id} が見つかりません")
-            
+
             from_balance = from_account[0]["balance"]
             if from_balance < amount:
                 raise ValueError("残高不足です")
-            
+
             # 送金元から引き出し
-            db.sql_update("accounts", 
-                         {"balance": from_balance - amount}, 
-                         "id = ?", 
-                         (from_id,))
-            
+            db.sql_update("accounts",
+                          {"balance": from_balance - amount},
+                          "id = ?",
+                          (from_id,))
+
             # 送金先の残高を取得
             to_account = db.query("accounts", where="id = ?", parameters=(to_id,))
             if not to_account:
                 raise ValueError(f"口座 {to_id} が見つかりません")
-            
+
             to_balance = to_account[0]["balance"]
-            
+
             # 送金先に入金
-            db.sql_update("accounts", 
-                         {"balance": to_balance + amount}, 
-                         "id = ?", 
-                         (to_id,))
-            
+            db.sql_update("accounts",
+                          {"balance": to_balance + amount},
+                          "id = ?",
+                          (to_id,))
+
         print(f"送金完了: 口座{from_id} → 口座{to_id}, 金額: {amount}")
         return True
-        
+
     except NanaSQLiteError as e:
         print(f"データベースエラー: {e}")
         return False
     except ValueError as e:
         print(f"送金エラー: {e}")
         return False
+
 
 # テスト
 db.sql_insert("accounts", {"id": 1, "name": "Alice", "balance": 1000.0})
@@ -617,7 +630,7 @@ transfer(1, 2, 2000.0)  # 失敗（残高不足）
 ### 例2: ログの記録
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 from datetime import datetime
 
 db = NanaSQLite("logs.db")
@@ -628,12 +641,14 @@ db.create_table("logs", {
     "timestamp": "TEXT"
 })
 
+
 def log_operation(operation_name: str):
     """操作のログを記録するデコレータ"""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             start_time = datetime.now()
-            
+
             try:
                 with db.transaction():
                     # 開始ログ
@@ -642,10 +657,10 @@ def log_operation(operation_name: str):
                         "message": f"{operation_name} started",
                         "timestamp": start_time.isoformat()
                     })
-                    
+
                     # 実際の処理
                     result = func(*args, **kwargs)
-                    
+
                     # 完了ログ
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
@@ -654,9 +669,9 @@ def log_operation(operation_name: str):
                         "message": f"{operation_name} completed in {duration:.2f}s",
                         "timestamp": end_time.isoformat()
                     })
-                    
+
                 return result
-                
+
             except Exception as e:
                 # エラーログ
                 error_time = datetime.now()
@@ -666,9 +681,11 @@ def log_operation(operation_name: str):
                     "timestamp": error_time.isoformat()
                 })
                 raise
-        
+
         return wrapper
+
     return decorator
+
 
 @log_operation("データ処理")
 def process_data():
@@ -676,6 +693,7 @@ def process_data():
     import time
     time.sleep(1)
     return "success"
+
 
 process_data()
 ```

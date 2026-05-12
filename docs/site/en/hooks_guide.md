@@ -26,20 +26,20 @@ Useful built-in hooks are available in the `nanasqlite.hooks` module.
 Enforces uniqueness of a specific field.
 
 ```python
-from nanasqlite.hooks import UniqueHook
+from nyansqlite.hooks import UniqueHook
 
 # Ensure the "email" field serves as a unique identifier across the table
 db.add_hook(UniqueHook("email"))
 
 db["user1"] = {"email": "alice@example.com"}
-db["user2"] = {"email": "alice@example.com"} # Raises NanaSQLiteValidationError
+db["user2"] = {"email": "alice@example.com"}  # Raises NanaSQLiteValidationError
 ```
 
 ### CheckHook
 Validates values using a custom function. This is essentially a programmatic version of SQLite's `CHECK` constraint.
 
 ```python
-from nanasqlite.hooks import CheckHook
+from nyansqlite.hooks import CheckHook
 
 # Verify that age is 18 or older
 db.add_hook(CheckHook(lambda k, v: v.get("age", 0) >= 18, "Age must be >= 18"))
@@ -49,7 +49,7 @@ db.add_hook(CheckHook(lambda k, v: v.get("age", 0) >= 18, "Age must be >= 18"))
 Checks referential integrity with another table.
 
 ```python
-from nanasqlite.hooks import ForeignKeyHook
+from nyansqlite.hooks import ForeignKeyHook
 
 orders = db.table("orders")
 users = db.table("users")
@@ -63,17 +63,19 @@ Provides seamless integration with Pydantic models. It validates the model on wr
 
 ```python
 from pydantic import BaseModel
-from nanasqlite.hooks import PydanticHook
+from nyansqlite.hooks import PydanticHook
+
 
 class User(BaseModel):
     name: str
     age: int
 
+
 db.add_hook(PydanticHook(User))
 
 db["u1"] = {"name": "Nana", "age": 20}
 user = db["u1"]
-print(type(user)) # <class 'User'>
+print(type(user))  # <class 'User'>
 print(user.name)  # Nana
 ```
 

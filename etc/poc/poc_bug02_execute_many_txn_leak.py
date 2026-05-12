@@ -10,7 +10,7 @@ BUG-02 [High] execute_many: 非 apsw.Error 例外でトランザクションが�
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

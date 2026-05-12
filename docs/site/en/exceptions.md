@@ -22,7 +22,7 @@ NanaSQLiteError (base class)
 Base class for all NanaSQLite exceptions.
 
 ```python
-from nanasqlite import NanaSQLiteError
+from nyansqlite import NanaSQLiteError
 
 try:
     db["key"]
@@ -36,7 +36,7 @@ except NanaSQLiteError as e:
 Raised when data validation fails. Used with `validkit-py` schema validation.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 db = NanaSQLite("app.db", validator={"name": str, "age": int})
 
@@ -56,7 +56,7 @@ except NanaSQLiteValidationError as e:
 Raised when an error occurs during SQLite database operations. Retains the original exception via the `original_error` attribute.
 
 ```python
-from nanasqlite import NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLiteDatabaseError
 
 try:
     db.execute("INVALID SQL STATEMENT")
@@ -77,7 +77,7 @@ except NanaSQLiteDatabaseError as e:
 Raised when an error occurs during transaction operations.
 
 ```python
-from nanasqlite import NanaSQLiteTransactionError
+from nyansqlite import NanaSQLiteTransactionError
 
 try:
     db.begin_transaction()
@@ -96,7 +96,7 @@ except NanaSQLiteTransactionError as e:
 Raised when a database connection error occurs.
 
 ```python
-from nanasqlite import NanaSQLiteConnectionError
+from nyansqlite import NanaSQLiteConnectionError
 
 try:
     db = NanaSQLite("/invalid/path/db.sqlite")
@@ -113,7 +113,7 @@ except NanaSQLiteConnectionError as e:
 Raised when performing operations on a closed database. Subclass of `NanaSQLiteConnectionError`.
 
 ```python
-from nanasqlite import NanaSQLiteClosedError
+from nyansqlite import NanaSQLiteClosedError
 
 db = NanaSQLite("app.db")
 db.close()
@@ -133,7 +133,7 @@ except NanaSQLiteClosedError as e:
 Raised when database lock acquisition fails.
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteLockError
+from nyansqlite import NanaSQLite, NanaSQLiteLockError
 
 db = NanaSQLite("app.db", lock_timeout=5.0)
 
@@ -152,7 +152,7 @@ except NanaSQLiteLockError as e:
 Raised when an error occurs during cache operations.
 
 ```python
-from nanasqlite import NanaSQLiteCacheError
+from nyansqlite import NanaSQLiteCacheError
 
 try:
     db.clear_cache()
@@ -169,7 +169,7 @@ except NanaSQLiteCacheError as e:
 ### 1. Catch Specific Exceptions
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,
     NanaSQLiteTransactionError,
@@ -196,7 +196,7 @@ except NanaSQLiteDatabaseError:
 ### 2. Catch All with Base Class
 
 ```python
-from nanasqlite import NanaSQLiteError
+from nyansqlite import NanaSQLiteError
 
 try:
     db["key"] = data
@@ -222,7 +222,7 @@ except NanaSQLiteTransactionError:
 All exception classes can be imported directly from the `nanasqlite` package:
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLiteError,
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,

@@ -11,8 +11,8 @@ SEC-02 [Medium] sql_update() / sql_delete() の where 句が _validate_expressio
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

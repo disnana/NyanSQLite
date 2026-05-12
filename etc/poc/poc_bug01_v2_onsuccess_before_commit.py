@@ -15,7 +15,7 @@ os.close(fd)
 try:
     import apsw
 
-    from nanasqlite.v2_engine import StrictTask, V2Engine
+    from nyansqlite.v2_engine import StrictTask, V2Engine
 
     conn = apsw.Connection(path)
     conn.execute("CREATE TABLE IF NOT EXISTS data (key TEXT PRIMARY KEY, value TEXT)")

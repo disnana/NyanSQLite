@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, abort, jsonify, request
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 app = Flask(__name__)
 

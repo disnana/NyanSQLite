@@ -9,7 +9,7 @@ showing how to use it in async applications without blocking.
 import asyncio
 import time
 
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 
 async def basic_async_demo():

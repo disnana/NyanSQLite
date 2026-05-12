@@ -24,12 +24,14 @@
 
 ```python
 # ❌ 同期版（非同期アプリでブロッキング発生）
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
+
 db = NanaSQLite("app.db")
 user = db["user"]  # イベントループをブロック！
 
 # ✅ 非同期版（ブロッキングなし、スレッドプール使用）
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 # 書き込み/重い処理には max_workers、並列読み込みには read_pool_size を調整
 async with AsyncNanaSQLite("app.db", max_workers=10, read_pool_size=4) as db:
     user = await db.aget("user")  # イベントループをブロックしない
@@ -41,7 +43,8 @@ async with AsyncNanaSQLite("app.db", max_workers=10, read_pool_size=4) as db:
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     # コンテキストマネージャを使用（推奨）
@@ -52,6 +55,7 @@ async def main():
         await db.aset("key", "value")
         value = await db.aget("key")
         print(value)
+
 
 asyncio.run(main())
 ```
@@ -120,8 +124,9 @@ async with AsyncNanaSQLite("mydata.db") as db:
 
 ```python
 from fastapi import FastAPI
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -131,7 +136,9 @@ async def lifespan(app: FastAPI):
     # シャットダウン時にデータベースをクローズ
     await app.state.db.close()
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 # エンドポイント
 @app.get("/users/{user_id}")
@@ -140,6 +147,7 @@ async def get_user(user_id: str):
     if user is None:
         return {"error": "User not found"}
     return user
+
 
 @app.post("/users")
 async def create_user(user: dict):
@@ -151,19 +159,22 @@ async def create_user(user: dict):
 
 ```python
 from quart import Quart, request, jsonify
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 app = Quart(__name__)
 db = None
+
 
 @app.before_serving
 async def startup():
     global db
     db = AsyncNanaSQLite("app.db")
 
+
 @app.after_serving
 async def shutdown():
     await db.close()
+
 
 @app.route("/users/<user_id>")
 async def get_user(user_id):

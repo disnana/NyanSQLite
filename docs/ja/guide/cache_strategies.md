@@ -15,7 +15,7 @@ NanaSQLite は複数のキャッシュ戦略を提供し、ユースケースに
 デフォルトのキャッシュ戦略です。全データをメモリ上に保持し、最速のアクセスを実現します。
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("app.db")  # デフォルト: 無制限
 db = NanaSQLite("app.db", cache_strategy="unbounded")  # 明示的
@@ -26,7 +26,7 @@ db = NanaSQLite("app.db", cache_strategy="unbounded")  # 明示的
 最近最も使われていないデータを自動的に削除するキャッシュです。
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 db = NanaSQLite("app.db", cache_strategy=CacheType.LRU, cache_size=1000)
 ```
@@ -34,7 +34,7 @@ db = NanaSQLite("app.db", cache_strategy=CacheType.LRU, cache_size=1000)
 `lru-dict` がインストールされている場合、C 拡張による高速 LRU が自動使用されます:
 
 ```bash
-pip install nanasqlite[speed]
+pip install nyansqlite[speed]
 ```
 
 ## TTL キャッシュ
@@ -42,7 +42,7 @@ pip install nanasqlite[speed]
 一定時間経過後にデータが自動失効するキャッシュです。
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 db = NanaSQLite("app.db", cache_strategy=CacheType.TTL, cache_ttl=60.0)
 ```

@@ -17,9 +17,9 @@ Pydanticのようなクラスベースではなく、辞書表現でシンプル
 
 import validkit
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
-from nanasqlite.hooks import ValidkitHook
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite.hooks import ValidkitHook
 
 # ==============================================================================
 # 1. バリデーションスキーマの定義

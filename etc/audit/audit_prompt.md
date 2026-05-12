@@ -92,9 +92,11 @@ v{{VERSION}}リリース前に、以下のソースファイルすべてを精�
 4. **クリーンアップ**: 一時ファイル・DB を必ず後始末すること
 
 ### POC テンプレート
+
 ```python
 \"\"\"
-{ID} [{重要度}] {タイトル}
+{ID}[{重要度}]
+{タイトル}
 
 {問題の簡潔な説明}
 修正後: {期待する動作}
@@ -102,7 +104,7 @@ v{{VERSION}}リリース前に、以下のソースファイルすべてを精�
 
 import os
 import tempfile
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

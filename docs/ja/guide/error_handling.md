@@ -25,7 +25,7 @@ NanaSQLiteは以下のカスタム例外クラスを提供しています：
 すべてのNanaSQLite固有の例外の基底クラス。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -47,7 +47,7 @@ except NanaSQLiteError as e:
 - validkit-py スキーマ違反（`validator` 指定時）
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 db = NanaSQLite("mydata.db")
 
@@ -60,9 +60,10 @@ except NanaSQLiteValidationError as e:
 ```
 
 **validkit-py スキーマ違反の例:**
+
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("mydata.db", validator=schema)
@@ -87,7 +88,7 @@ SQLite/APSWのデータベース操作で発生するエラーをラップしま
 - SQL構文エラー
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 db = NanaSQLite("mydata.db")
 
@@ -111,7 +112,7 @@ except NanaSQLiteDatabaseError as e:
 - トランザクション中の接続クローズ
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 db = NanaSQLite("mydata.db")
 
@@ -133,7 +134,7 @@ except NanaSQLiteTransactionError as e:
 - 孤立した子インスタンスの使用
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteConnectionError
+from nyansqlite import NanaSQLite, NanaSQLiteConnectionError
 
 db = NanaSQLite("mydata.db")
 db.close()
@@ -154,7 +155,7 @@ except NanaSQLiteConnectionError as e:
 - マルチスレッドアプリケーションでのロック競合／デッドロック状況によるロック取得タイムアウト
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteLockError
+from nyansqlite import NanaSQLite, NanaSQLiteLockError
 
 db = NanaSQLite("mydata.db", lock_timeout=2.0)
 
@@ -173,7 +174,7 @@ except NanaSQLiteLockError as e:
 - 親接続がクローズされた後の子インスタンス（`.table()`）の使用
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteClosedError
+from nyansqlite import NanaSQLite, NanaSQLiteClosedError
 
 db = NanaSQLite("mydata.db")
 db.close()
@@ -207,7 +208,7 @@ Exception
 すべてのNanaSQLite例外は`NanaSQLiteError`を継承しているため、包括的なエラーハンドリングが可能です：
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -229,7 +230,7 @@ except NanaSQLiteError as e:
 **問題**: 複数のプロセスまたはスレッドが同時にデータベースにアクセスしようとしている。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 db = NanaSQLite("mydata.db")
 
@@ -256,7 +257,7 @@ db.pragma("busy_timeout", 5000)  # 5秒待機
 **問題**: SQLiteはネストしたトランザクションをサポートしていません。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 db = NanaSQLite("mydata.db")
 
@@ -285,7 +286,7 @@ with db.transaction():
 **問題**: 接続を閉じた後に操作を試みる。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteConnectionError
+from nyansqlite import NanaSQLite, NanaSQLiteConnectionError
 
 db = NanaSQLite("mydata.db")
 db.close()
@@ -309,7 +310,7 @@ with NanaSQLite("mydata.db") as db:
 **問題**: 親インスタンスを閉じた後、子インスタンスを使用しようとする。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteConnectionError
+from nyansqlite import NanaSQLite, NanaSQLiteConnectionError
 
 main_db = NanaSQLite("app.db")
 sub_db = main_db.table("users")
@@ -336,7 +337,7 @@ with NanaSQLite("app.db") as main_db:
 **問題**: SQLインジェクション対策として、識別子は厳格に検証されます。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 db = NanaSQLite("mydata.db")
 
@@ -365,7 +366,7 @@ db.create_table("_private_table", {"id": "INTEGER"})
 特定のエラーに対して適切な処理を行うため、具体的な例外をキャッチします。
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLite,
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,
@@ -410,7 +411,7 @@ finally:
 複数の操作をアトミックに実行するため、トランザクションを使用します。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 db = NanaSQLite("mydata.db")
 db.create_table("accounts", {
@@ -437,7 +438,7 @@ except NanaSQLiteError as e:
 
 ```python
 import logging
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -455,7 +456,8 @@ except NanaSQLiteError as e:
 技術的な詳細を隠し、ユーザーフレンドリーなメッセージを提供します。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError, NanaSQLiteDatabaseError
+
 
 def save_user_data(user_data):
     try:
@@ -486,7 +488,7 @@ def save_user_data(user_data):
 `NanaSQLiteDatabaseError`は元のAPSWエラーを保持しています：
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -544,7 +546,7 @@ PYTHONVERBOSE=1 python your_script.py
 
 ```python
 import traceback
-from nanasqlite import NanaSQLite, NanaSQLiteError
+from nyansqlite import NanaSQLite, NanaSQLiteError
 
 try:
     db = NanaSQLite("mydata.db")
@@ -562,7 +564,8 @@ except NanaSQLiteError as e:
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite, NanaSQLiteError
+from nyansqlite import AsyncNanaSQLite, NanaSQLiteError
+
 
 async def main():
     try:
@@ -570,6 +573,7 @@ async def main():
             await db.aset("key", "value")
     except NanaSQLiteError as e:
         print(f"エラー: {e}")
+
 
 asyncio.run(main())
 ```

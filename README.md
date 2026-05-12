@@ -27,7 +27,7 @@
 ### 📦 Installation
 
 ```bash
-pip install nanasqlite
+pip install nyansqlite
 ```
 
 Optional installation extras:
@@ -49,7 +49,7 @@ pip install -e ".[dev]"
 ### ⚡ Quick Start
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Create or open a database
 db = NanaSQLite("mydata.db")
@@ -96,13 +96,15 @@ with NanaSQLite("mydata.db") as db:
 Intercept database operations with custom hooks or built-in constraints. Easily validate data, enforce uniqueness, check foreign keys, or flawlessly integrate with Pydantic.
 
 ```python
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import UniqueHook, CheckHook, PydanticHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import UniqueHook, CheckHook, PydanticHook
 from pydantic import BaseModel
+
 
 class UserConfig(BaseModel):
     version: int
     theme: str
+
 
 db = NanaSQLite("config.db")
 db.add_hook(UniqueHook("email"))
@@ -123,7 +125,8 @@ Introduced an optional "Write-Back Cache" architecture where all KVS writes are 
 db = NanaSQLite("high_load.db", v2_mode=True, flush_mode="time", flush_interval=1.0)
 
 # Optional: Use V2Config for cleaner initialization (v1.4.1+)
-from nanasqlite import V2Config
+from nyansqlite import V2Config
+
 cfg = V2Config(flush_mode="time", flush_interval=5.0, enable_metrics=True)
 db = NanaSQLite("mydata.db", v2_mode=True, v2_config=cfg)
 
@@ -194,7 +197,7 @@ db.close()
 **Safely operate multiple tables in the same database with shared connections:**
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Create main table instance
 main_db = NanaSQLite("mydata.db", table="users")
@@ -213,7 +216,7 @@ orders_db["order1"] = {"user": "user1", "product": "prod1"}
 **Transaction Support & Error Handling (v1.1.0+):**
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 with db.transaction():
     db["key1"] = "value1"
@@ -258,7 +261,7 @@ db.sql_insert("users", {"name": "Alice", "age": 25})
 ### 📦 インストール
 
 ```bash
-pip install nanasqlite
+pip install nyansqlite
 ```
 
 オプション機能付きのインストール:
@@ -280,7 +283,7 @@ pip install -e ".[dev]"
 ### ⚡ クイックスタート
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # データベースを作成または開く
 db = NanaSQLite("mydata.db")
@@ -327,13 +330,15 @@ with NanaSQLite("mydata.db") as db:
 データベースの読み書き・削除をカスタムフックや組み込み制約でインターセプトできます。データの検証、一意性の保証、外部キー制約のチェック、Pydantic とのシームレスな統合などが容易に行えます。
 
 ```python
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import UniqueHook, CheckHook, PydanticHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import UniqueHook, CheckHook, PydanticHook
 from pydantic import BaseModel
+
 
 class UserConfig(BaseModel):
     version: int
     theme: str
+
 
 db = NanaSQLite("config.db")
 db.add_hook(UniqueHook("email"))
@@ -356,7 +361,8 @@ KVSの書き込みをすべて「Write-Back Cache（メモリ優先更新）」�
 db = NanaSQLite("high_load.db", v2_mode=True, flush_mode="time", flush_interval=1.0)
 
 # オプション: V2Configを使用して設定をひとまとめに（v1.4.1+）
-from nanasqlite import V2Config
+from nyansqlite import V2Config
+
 cfg = V2Config(flush_mode="time", flush_interval=5.0, enable_metrics=True)
 db = NanaSQLite("mydata.db", v2_mode=True, v2_config=cfg)
 
@@ -422,7 +428,7 @@ db.close()
 **同一データベース内の複数テーブルを接続共有で安全に操作:**
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # メインテーブルインスタンスを作成
 main_db = NanaSQLite("mydata.db", table="users")
@@ -439,16 +445,16 @@ products_db["prod1"] = {"name": "Laptop"}
 **オプションのデータ暗号化 (v1.3.1a1+):**
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
-# 事前にインストール: pip install nanasqlite[encryption]
-db = NanaSQLite("secure.db", encryption_key=b"your-32-byte-key") # デフォルトで AES-GCM
+# 事前にインストール: pip install nyansqlite[encryption]
+db = NanaSQLite("secure.db", encryption_key=b"your-32-byte-key")  # デフォルトで AES-GCM
 
 # モードを明示的に指定する場合
-db_chacha = NanaSQLite("secure_cc.db", 
-    encryption_key=b"your-32-byte-key", 
-    encryption_mode="chacha20"
-)
+db_chacha = NanaSQLite("secure_cc.db",
+                       encryption_key=b"your-32-byte-key",
+                       encryption_mode="chacha20"
+                       )
 
 # SQLite内では暗号化されますが、メモリ上（キャッシュ）では平文で高速に扱えます
 db["secret"] = {"password": "123"}
@@ -457,7 +463,7 @@ db["secret"] = {"password": "123"}
 **トランザクションサポートとエラーハンドリング (v1.1.0+):**
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteTransactionError
+from nyansqlite import NanaSQLite, NanaSQLiteTransactionError
 
 with db.transaction():
     db["key1"] = "value1"

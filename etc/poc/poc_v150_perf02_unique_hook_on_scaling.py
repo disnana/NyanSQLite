@@ -13,8 +13,8 @@ import string
 import tempfile
 import time
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import UniqueHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import UniqueHook
 
 
 def generate_random_email():

@@ -15,7 +15,7 @@ NanaSQLite provides multiple caching strategies to achieve optimal performance f
 The default caching strategy. Keeps all data in memory for the fastest possible access.
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Default: unbounded cache
 db = NanaSQLite("app.db")
@@ -47,7 +47,7 @@ db.load_all()
 Least Recently Used cache that automatically evicts the oldest-accessed entries.
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 # LRU cache: keep at most 1000 entries
 db = NanaSQLite(
@@ -79,7 +79,7 @@ val = db.get_fresh("key1")  # Bypass cache, read directly from DB
 When the `lru-dict` package is installed, a C-extension-based fast LRU is automatically used.
 
 ```bash
-pip install nanasqlite[speed]  # Installs lru-dict + orjson
+pip install nyansqlite[speed]  # Installs lru-dict + orjson
 ```
 
 Speed comparison:
@@ -102,13 +102,13 @@ Speed comparison:
 Time-To-Live cache that automatically expires data after a specified duration.
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 # TTL cache: expire after 60 seconds
 db = NanaSQLite(
     "app.db",
     cache_strategy=CacheType.TTL,
-    cache_ttl=60.0,         # in seconds
+    cache_ttl=60.0,  # in seconds
 )
 ```
 
@@ -210,7 +210,8 @@ db.batch_delete(["k1", "k2"])
 The same cache strategies are available with `AsyncNanaSQLite`:
 
 ```python
-from nanasqlite import AsyncNanaSQLite, CacheType
+from nyansqlite import AsyncNanaSQLite, CacheType
+
 
 async def main():
     db = AsyncNanaSQLite(

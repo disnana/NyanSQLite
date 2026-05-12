@@ -16,9 +16,9 @@ NanaSQLite v1.5.0dev1 では、Pythonで人気のデータバリデーション�
 
 from pydantic import BaseModel, Field
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
-from nanasqlite.hooks import PydanticHook
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite.hooks import PydanticHook
 
 # ==============================================================================
 # 1. Pydanticモデルの定義

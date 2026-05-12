@@ -20,20 +20,20 @@
 特定のフィールドの一意性を保証します。
 
 ```python
-from nanasqlite.hooks import UniqueHook
+from nyansqlite.hooks import UniqueHook
 
 # "email" フィールドの値がテーブル全体で重複しないことを保証
 db.add_hook(UniqueHook("email"))
 
 db["user1"] = {"email": "alice@example.com"}
-db["user2"] = {"email": "alice@example.com"} # NanaSQLiteValidationError
+db["user2"] = {"email": "alice@example.com"}  # NanaSQLiteValidationError
 ```
 
 ### CheckHook
 カスタム関数による値の検証を行います。SQLite の `CHECK` 制約のコード版です。
 
 ```python
-from nanasqlite.hooks import CheckHook
+from nyansqlite.hooks import CheckHook
 
 # 年齢が 18 歳以上であることを検証
 db.add_hook(CheckHook(lambda k, v: v.get("age", 0) >= 18, "Age must be >= 18"))
@@ -43,7 +43,7 @@ db.add_hook(CheckHook(lambda k, v: v.get("age", 0) >= 18, "Age must be >= 18"))
 他のテーブルとの参照整合性をチェックします。
 
 ```python
-from nanasqlite.hooks import ForeignKeyHook
+from nyansqlite.hooks import ForeignKeyHook
 
 orders = db.table("orders")
 users = db.table("users")
@@ -57,17 +57,19 @@ Pydantic モデルとのシームレスな統合を提供します。書き込�
 
 ```python
 from pydantic import BaseModel
-from nanasqlite.hooks import PydanticHook
+from nyansqlite.hooks import PydanticHook
+
 
 class User(BaseModel):
     name: str
     age: int
 
+
 db.add_hook(PydanticHook(User))
 
 db["u1"] = {"name": "Nana", "age": 20}
 user = db["u1"]
-print(type(user)) # <class 'User'>
+print(type(user))  # <class 'User'>
 print(user.name)  # Nana
 ```
 

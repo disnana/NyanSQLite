@@ -17,7 +17,7 @@ try:
 except AttributeError:
     pass
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 
 class Benchmark:

@@ -15,10 +15,10 @@ NanaSQLite supports transparent data encryption since v1.3.1. Data is automatica
 The `cryptography` package is required for encryption:
 
 ```bash
-pip install nanasqlite[encryption]
+pip install nyansqlite[encryption]
 
 # Or install everything
-pip install nanasqlite[all]
+pip install nyansqlite[all]
 ```
 
 ## Basic Usage
@@ -29,7 +29,7 @@ The fastest and recommended encryption mode:
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Generate a 32-byte encryption key
 raw_key = os.urandom(32)
@@ -37,7 +37,7 @@ raw_key = os.urandom(32)
 with NanaSQLite("secure.db", encryption_key=raw_key) as db:
     # Use as normal — encryption/decryption is automatic
     db["secret"] = {"password": "s3cret", "api_key": "abc123"}
-    
+
     data = db["secret"]
     print(data)  # {"password": "s3cret", "api_key": "abc123"}
 ```
@@ -48,14 +48,14 @@ Performs well on ARM devices and environments without hardware AES support:
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 raw_key = os.urandom(32)
 
 with NanaSQLite(
-    "secure.db",
-    encryption_key=raw_key,
-    encryption_mode="chacha20",
+        "secure.db",
+        encryption_key=raw_key,
+        encryption_mode="chacha20",
 ) as db:
     db["data"] = {"sensitive": True}
 ```
@@ -66,15 +66,15 @@ Suitable when you need straightforward encryption:
 
 ```python
 from cryptography.fernet import Fernet
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Generate a Fernet key (base64-encoded)
 key = Fernet.generate_key()
 
 with NanaSQLite(
-    "secure.db",
-    encryption_key=key,
-    encryption_mode="fernet",
+        "secure.db",
+        encryption_key=key,
+        encryption_mode="fernet",
 ) as db:
     db["token"] = "sensitive-token-value"
 ```
@@ -158,9 +158,10 @@ The same encryption options work with `AsyncNanaSQLite`:
 
 ```python
 import os
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 raw_key = os.urandom(32)
+
 
 async def main():
     db = AsyncNanaSQLite(
@@ -181,7 +182,7 @@ To migrate an existing unencrypted database to an encrypted one:
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # 1. Read all data from the unencrypted DB
 with NanaSQLite("old.db", bulk_load=True) as old_db:
@@ -200,7 +201,7 @@ If you change the encryption mode or key, existing data becomes unreadable. Alwa
 ## Error Handling
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 try:
     with NanaSQLite("secure.db", encryption_key=wrong_key) as db:

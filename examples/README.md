@@ -158,7 +158,7 @@ Demonstrates validkit-py integration with batch operations, showing the differen
 
 **Requirements:**
 ```bash
-pip install nanasqlite[validation]
+pip install nyansqlite[validation]
 ```
 
 **Running:**
@@ -185,9 +185,11 @@ This test script validates all the NanaSQLite patterns used in the examples, ens
 ## Key Patterns Demonstrated
 
 ### Async Pattern (FastAPI)
+
 ```python
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -195,18 +197,22 @@ async def lifespan(app):
     yield
     await app.state.db.close()
 
-async def get_user(user_id: str, db = Depends(get_db)):
+
+async def get_user(user_id: str, db=Depends(get_db)):
     return await db.aget(f"user_{user_id}")
 ```
 
 ### Sync Pattern (Flask)
+
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
+
 
 def get_db():
     if not hasattr(app, 'database'):
         app.database = NanaSQLite("app.db")
     return app.database
+
 
 @app.teardown_appcontext
 def close_db(error):

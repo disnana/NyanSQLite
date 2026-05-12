@@ -1,6 +1,6 @@
-from nanasqlite.core import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
-from nanasqlite.hooks import CheckHook, UniqueHook
+from nyansqlite.core import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite.hooks import CheckHook, UniqueHook
 
 
 def main():

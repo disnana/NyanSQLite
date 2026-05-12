@@ -50,7 +50,7 @@ SQLite 操作中のエラー。`original_error` 属性で元の例外を保持�
 ## インポート
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLiteError,
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,

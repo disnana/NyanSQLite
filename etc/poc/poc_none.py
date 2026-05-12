@@ -1,6 +1,6 @@
 import os
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db_path = "test_none.db"
 if os.path.exists(db_path):

@@ -8,8 +8,8 @@ BUG-03 [Low] batch_delete() の before_delete フックがロック外で呼ば�
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import BaseHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import BaseHook
 
 
 class LockInspectDeleteHook(BaseHook):

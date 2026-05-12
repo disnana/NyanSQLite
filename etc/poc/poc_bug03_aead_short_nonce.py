@@ -12,8 +12,8 @@ import tempfile
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteDatabaseError
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

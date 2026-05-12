@@ -257,10 +257,12 @@ def save_user(db: NanaSQLite, user_data: dict) -> bool:
 ### Connection Pooling for Web Applications
 
 **FastAPI Example**
+
 ```python
 from fastapi import FastAPI, Depends
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -270,11 +272,14 @@ async def lifespan(app: FastAPI):
     # Shutdown: Close database
     await app.state.db.close()
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 async def get_db() -> AsyncNanaSQLite:
     """Dependency injection for database"""
     return app.state.db
+
 
 @app.get("/users/{user_id}")
 async def get_user(user_id: str, db: AsyncNanaSQLite = Depends(get_db)):
@@ -389,14 +394,16 @@ Use `backup()` to create periodic snapshots without interrupting the running app
 ```python
 import schedule
 import time
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("production.db")
+
 
 def daily_backup():
     from datetime import date
     db.backup(f"backups/production_{date.today()}.db")
     print(f"Backup completed: {date.today()}")
+
 
 schedule.every().day.at("02:00").do(daily_backup)
 

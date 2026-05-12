@@ -77,7 +77,7 @@ NanaSQLite applies these SQLite optimizations by default:
 ## Installation
 
 ```bash
-pip install nanasqlite
+pip install nyansqlite
 ```
 
 **Requirements:**
@@ -91,7 +91,7 @@ pip install nanasqlite
 ### Basic Usage
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Create or open a database
 db = NanaSQLite("mydata.db")
@@ -103,8 +103,8 @@ db["count"] = 42
 
 # Retrieve data
 print(db["config"]["theme"])  # 'dark'
-print(db["users"][0])          # 'Alice'
-print(db["count"])             # 42
+print(db["users"][0])  # 'Alice'
+print(db["count"])  # 42
 
 # Check existence
 if "config" in db:

@@ -13,7 +13,7 @@ NanaSQLite は v1.3.1 以降、透過的なデータ暗号化をサポートし�
 ## インストール
 
 ```bash
-pip install nanasqlite[encryption]
+pip install nyansqlite[encryption]
 ```
 
 ## 基本的な使い方
@@ -22,7 +22,7 @@ pip install nanasqlite[encryption]
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 raw_key = os.urandom(32)
 
@@ -35,7 +35,7 @@ with NanaSQLite("secure.db", encryption_key=raw_key) as db:
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 raw_key = os.urandom(32)
 
@@ -47,7 +47,7 @@ with NanaSQLite("secure.db", encryption_key=raw_key, encryption_mode="chacha20")
 
 ```python
 from cryptography.fernet import Fernet
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 key = Fernet.generate_key()
 

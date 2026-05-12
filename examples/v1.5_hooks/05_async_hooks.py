@@ -15,10 +15,10 @@ v1.5.0dev1 以降導入された Ultimate Hooks は完全な互換性を持っ�
 import asyncio
 from typing import Any
 
-from nanasqlite import AsyncNanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
-from nanasqlite.hooks import CheckHook
-from nanasqlite.protocols import NanaHook
+from nyansqlite import AsyncNanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite.hooks import CheckHook
+from nyansqlite.protocols import NanaHook
 
 
 # ==============================================================================

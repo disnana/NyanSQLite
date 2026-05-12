@@ -50,7 +50,7 @@ Raised during cache operation errors.
 ## Imports
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLiteError,
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,

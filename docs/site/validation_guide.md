@@ -18,18 +18,18 @@
 バリデーション機能を有効にするには、extra 付きでインストールします。
 
 ```bash
-pip install nanasqlite[validation]
+pip install nyansqlite[validation]
 ```
 
 実行時には、オプション依存が利用可能かどうかを確認できます。
 
 ```python
-from nanasqlite import HAS_VALIDKIT
+from nyansqlite import HAS_VALIDKIT
 
 if HAS_VALIDKIT:
     print("validkit-py が利用可能です")
 else:
-    print("nanasqlite[validation] をインストールしてください")
+    print("nyansqlite[validation] をインストールしてください")
 ```
 
 ## 基本的なスキーマ検証
@@ -38,7 +38,7 @@ else:
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {
     "name": v.str(),
@@ -63,7 +63,7 @@ except NanaSQLiteValidationError as exc:
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 schema = {
     "age": v.int().coerce(),
@@ -80,7 +80,7 @@ print(db["player1"])  # {"age": 20, "score": 9.5}
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"age": v.int()}
 db = NanaSQLite("bad.db", validator=schema, coerce=True)
@@ -97,7 +97,7 @@ except NanaSQLiteValidationError:
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 user_schema = {"name": v.str(), "age": v.int()}
 score_schema = {"player": v.str(), "score": v.float().range(0.0, 100.0)}
@@ -117,7 +117,7 @@ cache_db["raw"] = {"anything": "goes"}
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("app.db")
 coerce_schema = {"age": v.int().coerce()}
@@ -131,7 +131,7 @@ coerce_db["u2"] = {"age": "31"}  # {"age": 31} として保存
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("batch.db", validator=schema)

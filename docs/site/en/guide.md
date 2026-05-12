@@ -12,7 +12,7 @@ A step-by-step guide to learning NanaSQLite from basics to advanced features.
 
 ```bash
 # Basic installation
-pip install nanasqlite
+pip install nyansqlite
 
 # Recommended: with performance boosters (quotes recommended for some shells)
 pip install "nanasqlite[speed]"
@@ -25,7 +25,7 @@ pip install "nanasqlite[speed]"
 ### Creating a Database
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Create or open a database file
 db = NanaSQLite("tutorial.db")
@@ -37,7 +37,7 @@ db["pi"] = 3.14159
 
 # Retrieve data
 print(db["greeting"])  # Hello, World!
-print(db["number"])    # 42
+print(db["number"])  # 42
 
 # Close when done
 db.close()
@@ -51,7 +51,7 @@ db.close()
 ### Using Context Manager
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Automatically closes database when done
 with NanaSQLite("tutorial.db") as db:
@@ -220,22 +220,24 @@ with NanaSQLite("tutorial.db") as db:
 
 ```python
 from pydantic import BaseModel
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
+
 
 class User(BaseModel):
     name: str
     age: int
     email: str
 
+
 with NanaSQLite("tutorial.db") as db:
     # Save Pydantic model
     user = User(name="Alice", age=30, email="alice@example.com")
     db.set_model("user_alice", user)
-    
+
     # Retrieve as Pydantic model
     retrieved = db.get_model("user_alice", User)
-    print(retrieved.name)   # Alice
-    print(retrieved.age)    # 30
+    print(retrieved.name)  # Alice
+    print(retrieved.age)  # 30
     print(type(retrieved))  # <class '__main__.User'>
 ```
 
@@ -289,7 +291,7 @@ with NanaSQLite("tutorial.db") as db:
 ## Lesson 7: Error Handling
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 with NanaSQLite("tutorial.db") as db:
     # Handle missing keys
@@ -297,12 +299,13 @@ with NanaSQLite("tutorial.db") as db:
         value = db["nonexistent"]
     except KeyError:
         print("Key not found!")
-    
+
     # Better: Use get() with default
     value = db.get("nonexistent", "default")
-    
+
     # Handle SQL errors
     import apsw
+
     try:
         db.execute("INVALID SQL")
     except apsw.Error as e:
@@ -314,7 +317,7 @@ with NanaSQLite("tutorial.db") as db:
 You can use different tables for different data types within a single database file. Using the `.table()` method allows you to operate on independent tables while sharing the same underlying connection.
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Create the main instance
 db = NanaSQLite("app.db")
@@ -339,7 +342,8 @@ For async frameworks like FastAPI:
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     async with AsyncNanaSQLite("tutorial.db") as db:
@@ -347,13 +351,14 @@ async def main():
         await db.aset("user", {"name": "Alice"})
         user = await db.aget("user")
         print(user)
-        
+
         # Concurrent operations
         results = await asyncio.gather(
             db.aget("key1"),
             db.aget("key2"),
             db.aget("key3")
         )
+
 
 asyncio.run(main())
 ```
@@ -367,7 +372,7 @@ To keep memory usage under control while maintaining high speed, you can choose 
 ### Using LRU Cache
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 # Cache only the most recent 1000 items in memory
 with NanaSQLite("app.db", cache_strategy=CacheType.LRU, cache_size=1000) as db:
@@ -406,13 +411,13 @@ Transparent encryption support for storing sensitive data securely.
 ### Basic Encryption
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Provide a 32-byte key (AES-GCM is used by default)
 db = NanaSQLite("secure.db", encryption_key=b"your-32-byte-secure-key-here-!!!")
 
 db["secret"] = {"password": "top-secret-password"}
-print(db["secret"]) # Access as usual
+print(db["secret"])  # Access as usual
 ```
 
 ### Choosing Encryption Mode
@@ -460,7 +465,7 @@ By default, NanaSQLite waits indefinitely to acquire its internal lock.
 You can set `lock_timeout` to raise `NanaSQLiteLockError` if the lock is held too long:
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteLockError
+from nyansqlite import NanaSQLite, NanaSQLiteLockError
 
 db = NanaSQLite("app.db", lock_timeout=2.0)  # Raise error after 2 seconds
 

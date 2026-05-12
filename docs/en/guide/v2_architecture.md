@@ -52,14 +52,14 @@ Main Thread
 ### Enabling v2 Mode
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Enable v2 mode (defaults to immediate flush)
 db = NanaSQLite("mydb.db", v2_mode=True)
 
 # Writes are non-blocking on the main thread
 db["user:1"] = {"name": "Alice", "score": 100}
-db["user:2"] = {"name": "Bob",   "score": 200}
+db["user:2"] = {"name": "Bob", "score": 200}
 
 # Reads return instantly from the in-memory cache (zero latency)
 user = db["user:1"]
@@ -72,7 +72,7 @@ db.close()  # Flushes remaining buffer to SQLite on shutdown
 To address the issue of having too many parameters, a `V2Config` dataclass has been introduced to group all v2-related settings.
 
 ```python
-from nanasqlite import NanaSQLite, V2Config
+from nyansqlite import NanaSQLite, V2Config
 
 # Group settings using V2Config
 cfg = V2Config(
@@ -88,7 +88,7 @@ db = NanaSQLite("mydb.db", v2_mode=True, v2_config=cfg)
 ### Async (AsyncNanaSQLite)
 
 ```python
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 async with AsyncNanaSQLite("mydb.db", v2_mode=True) as db:
     await db.aset("key", "value")

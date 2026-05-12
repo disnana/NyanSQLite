@@ -24,12 +24,14 @@ In these applications, blocking operations halt the event loop and degrade overa
 
 ```python
 # ❌ Sync version (blocks async apps)
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
+
 db = NanaSQLite("app.db")
 user = db["user"]  # Blocks event loop!
 
 # ✅ Async version (non-blocking with thread pool)
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 async with AsyncNanaSQLite("app.db", max_workers=10) as db:
     user = await db.aget("user")  # Does not block event loop
 ```
@@ -40,7 +42,8 @@ async with AsyncNanaSQLite("app.db", max_workers=10) as db:
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     # Use context manager (recommended)
@@ -50,6 +53,7 @@ async def main():
         await db.aset("key", "value")
         value = await db.aget("key")
         print(value)
+
 
 asyncio.run(main())
 ```
@@ -118,8 +122,9 @@ async with AsyncNanaSQLite("mydata.db") as db:
 
 ```python
 from fastapi import FastAPI
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -127,7 +132,10 @@ async def lifespan(app):
     yield
     await app.state.db.close()
 
+
 app = FastAPI(lifespan=lifespan)
+
+
 # Endpoints
 @app.get("/users/{user_id}")
 async def get_user(user_id: str):
@@ -135,6 +143,7 @@ async def get_user(user_id: str):
     if user is None:
         return {"error": "User not found"}
     return user
+
 
 @app.post("/users")
 async def create_user(user: dict):
@@ -146,19 +155,22 @@ async def create_user(user: dict):
 
 ```python
 from quart import Quart, request, jsonify
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 app = Quart(__name__)
 db = None
+
 
 @app.before_serving
 async def startup():
     global db
     db = AsyncNanaSQLite("app.db")
 
+
 @app.after_serving
 async def shutdown():
     await db.close()
+
 
 @app.route("/users/<user_id>")
 async def get_user(user_id):

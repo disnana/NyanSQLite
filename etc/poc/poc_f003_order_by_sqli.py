@@ -1,4 +1,4 @@
-from nanasqlite.core import NanaSQLite
+from nyansqlite.core import NanaSQLite
 
 
 def main():

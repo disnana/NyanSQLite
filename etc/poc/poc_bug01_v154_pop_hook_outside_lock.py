@@ -8,8 +8,8 @@ BUG-01 [Medium] pop() の before_delete フックがロック外で呼ばれる
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import BaseHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import BaseHook
 
 
 class LockInspectDeleteHook(BaseHook):

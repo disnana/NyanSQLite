@@ -9,8 +9,8 @@ SEC-02 [High] _validate_expression() misses double-quoted identifiers
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteValidationError
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteValidationError
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

@@ -22,7 +22,7 @@ NanaSQLiteError（基底クラス）
 すべての NanaSQLite 例外の基底クラスです。
 
 ```python
-from nanasqlite import NanaSQLiteError
+from nyansqlite import NanaSQLiteError
 
 try:
     db["key"]
@@ -36,7 +36,7 @@ except NanaSQLiteError as e:
 データバリデーションに失敗した場合にスローされます。`validkit-py` によるスキーマ検証で使用されます。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 db = NanaSQLite("app.db", validator={"name": str, "age": int})
 
@@ -56,7 +56,7 @@ except NanaSQLiteValidationError as e:
 SQLite のデータベース操作中にエラーが発生した場合にスローされます。元の例外を `original_error` 属性で保持します。
 
 ```python
-from nanasqlite import NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLiteDatabaseError
 
 try:
     db.execute("INVALID SQL STATEMENT")
@@ -77,7 +77,7 @@ except NanaSQLiteDatabaseError as e:
 トランザクション操作中にエラーが発生した場合にスローされます。
 
 ```python
-from nanasqlite import NanaSQLiteTransactionError
+from nyansqlite import NanaSQLiteTransactionError
 
 try:
     db.begin_transaction()
@@ -96,7 +96,7 @@ except NanaSQLiteTransactionError as e:
 データベース接続に関するエラーが発生した場合にスローされます。
 
 ```python
-from nanasqlite import NanaSQLiteConnectionError
+from nyansqlite import NanaSQLiteConnectionError
 
 try:
     db = NanaSQLite("/invalid/path/db.sqlite")
@@ -113,7 +113,7 @@ except NanaSQLiteConnectionError as e:
 クローズ済みのデータベースに対して操作を行おうとした場合にスローされます。`NanaSQLiteConnectionError` のサブクラスです。
 
 ```python
-from nanasqlite import NanaSQLiteClosedError
+from nyansqlite import NanaSQLiteClosedError
 
 db = NanaSQLite("app.db")
 db.close()
@@ -133,7 +133,7 @@ except NanaSQLiteClosedError as e:
 データベースロックの取得に失敗した場合にスローされます。
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteLockError
+from nyansqlite import NanaSQLite, NanaSQLiteLockError
 
 db = NanaSQLite("app.db", lock_timeout=5.0)
 
@@ -152,7 +152,7 @@ except NanaSQLiteLockError as e:
 キャッシュ操作中にエラーが発生した場合にスローされます。
 
 ```python
-from nanasqlite import NanaSQLiteCacheError
+from nyansqlite import NanaSQLiteCacheError
 
 try:
     db.clear_cache()
@@ -169,7 +169,7 @@ except NanaSQLiteCacheError as e:
 ### 1. 具体的な例外をキャッチする
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,
     NanaSQLiteTransactionError,
@@ -196,7 +196,7 @@ except NanaSQLiteDatabaseError:
 ### 2. 基底クラスでまとめてキャッチ
 
 ```python
-from nanasqlite import NanaSQLiteError
+from nyansqlite import NanaSQLiteError
 
 try:
     db["key"] = data
@@ -222,7 +222,7 @@ except NanaSQLiteTransactionError:
 すべての例外クラスは `nanasqlite` パッケージから直接インポートできます:
 
 ```python
-from nanasqlite import (
+from nyansqlite import (
     NanaSQLiteError,
     NanaSQLiteValidationError,
     NanaSQLiteDatabaseError,

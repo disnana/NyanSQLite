@@ -13,7 +13,7 @@ BUG-01 [High] (v1.4.1dev3): upsert(table, data_dict, conflict_columns) の Attri
 import os
 import sys
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 
 def run_poc() -> None:

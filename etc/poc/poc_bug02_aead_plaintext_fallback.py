@@ -14,7 +14,7 @@ import tempfile
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 logging.basicConfig(level=logging.WARNING)
 

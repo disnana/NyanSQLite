@@ -18,7 +18,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 
-if os.path.isdir(os.path.join(SRC_DIR, "nanasqlite")) and SRC_DIR not in sys.path:
+if os.path.isdir(os.path.join(SRC_DIR, "nyansqlite")) and SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 HAS_VALIDKIT = False  # pylint: disable=invalid-name
@@ -33,13 +33,13 @@ v = None  # pylint: disable=invalid-name
 
 # Import NanaSQLite
 try:
-    from nanasqlite import HAS_VALIDKIT, AsyncNanaSQLite, NanaSQLite, NanaSQLiteValidationError
+    from nyansqlite import HAS_VALIDKIT, AsyncNanaSQLite, NanaSQLite, NanaSQLiteValidationError
 except ImportError:
     HAS_VALIDKIT = False
     AsyncNanaSQLite = None
     NanaSQLite = None
     NanaSQLiteValidationError = Exception
-    print("Error: NanaSQLite is not installed. Run: pip install nanasqlite")
+    print("Error: NanaSQLite is not installed. Run: pip install nyansqlite")
     sys.exit(1)
 
 # Import Pydantic (optional, for Pydantic test)
@@ -561,7 +561,7 @@ def main():
     print("  - Flask example: pip install flask")
     print("  - Pydantic example: pip install pydantic")
     print("  - Quart example: pip install quart hypercorn")
-    print("  - Validkit example: pip install nanasqlite[validation]")
+    print("  - Validkit example: pip install nyansqlite[validation]")
 
     return True
 

@@ -10,7 +10,7 @@ import os
 import tempfile
 import time
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

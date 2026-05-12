@@ -89,24 +89,24 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/disnana/nanasqlite"
-Documentation = "https://nanasqlite.disnana.com/"
-Repository = "https://github.com/disnana/nanasqlite"
-Issues = "https://github.com/disnana/nanasqlite/issues"
+Homepage = "https://github.com/disnana/nyansqlite"
+Documentation = "https://nyansqlite.disnana.com/"
+Repository = "https://github.com/disnana/nyansqlite"
+Issues = "https://github.com/disnana/nyansqlite/issues"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["nanasqlite*"]
+include = ["nyansqlite*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-nanasqlite = ["py.typed"]
+nyansqlite = ["py.typed"]
 
 [tool.setuptools.dynamic]
-version = {attr = "nanasqlite.__version__"}
+version = {attr = "nyansqlite.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -143,7 +143,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["nanasqlite"]
+known-first-party = ["nyansqlite"]
 
 [tool.mypy]
 python_version = "3.9"

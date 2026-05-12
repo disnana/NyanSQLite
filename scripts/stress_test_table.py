@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from src.nanasqlite import AsyncNanaSQLite, NanaSQLite
+from src.nyansqlite import AsyncNanaSQLite, NanaSQLite
 
 
 def test_sync_memory_leak():

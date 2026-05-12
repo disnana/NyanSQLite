@@ -9,7 +9,7 @@ SEC-01 [High] alter_table_add_column() column_type bypass
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

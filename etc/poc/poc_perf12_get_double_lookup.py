@@ -11,8 +11,8 @@ import tempfile
 import time
 
 try:
-    from nanasqlite import CacheType, NanaSQLite
-    from nanasqlite.cache import MISSING
+    from nyansqlite import CacheType, NanaSQLite
+    from nyansqlite.cache import MISSING
 
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)

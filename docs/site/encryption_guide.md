@@ -15,10 +15,10 @@ NanaSQLite は v1.3.1 以降、透過的なデータ暗号化をサポートし�
 暗号化機能を使用するには `cryptography` パッケージが必要です:
 
 ```bash
-pip install nanasqlite[encryption]
+pip install nyansqlite[encryption]
 
 # または全機能をインストール
-pip install nanasqlite[all]
+pip install nyansqlite[all]
 ```
 
 ## 基本的な使い方
@@ -30,7 +30,7 @@ pip install nanasqlite[all]
 ```python
 import os
 import base64
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # 32 バイトの暗号化キーを生成
 raw_key = os.urandom(32)
@@ -38,7 +38,7 @@ raw_key = os.urandom(32)
 with NanaSQLite("secure.db", encryption_key=raw_key) as db:
     # 通常通りデータを操作 — 暗号化/復号は自動
     db["secret"] = {"password": "s3cret", "api_key": "abc123"}
-    
+
     data = db["secret"]
     print(data)  # {"password": "s3cret", "api_key": "abc123"}
 ```
@@ -49,14 +49,14 @@ ARM デバイスやハードウェア AES が利用できない環境で高速�
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 raw_key = os.urandom(32)
 
 with NanaSQLite(
-    "secure.db",
-    encryption_key=raw_key,
-    encryption_mode="chacha20",
+        "secure.db",
+        encryption_key=raw_key,
+        encryption_mode="chacha20",
 ) as db:
     db["data"] = {"sensitive": True}
 ```
@@ -67,15 +67,15 @@ with NanaSQLite(
 
 ```python
 from cryptography.fernet import Fernet
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # Fernet キーを生成（base64 エンコード済み）
 key = Fernet.generate_key()
 
 with NanaSQLite(
-    "secure.db",
-    encryption_key=key,
-    encryption_mode="fernet",
+        "secure.db",
+        encryption_key=key,
+        encryption_mode="fernet",
 ) as db:
     db["token"] = "sensitive-token-value"
 ```
@@ -160,9 +160,10 @@ with open("/etc/secrets/db.key", "rb") as f:
 
 ```python
 import os
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 raw_key = os.urandom(32)
+
 
 async def main():
     db = AsyncNanaSQLite(
@@ -183,7 +184,7 @@ async def main():
 
 ```python
 import os
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # 1. 既存の非暗号化 DB を読み込み
 with NanaSQLite("old.db", bulk_load=True) as old_db:
@@ -202,7 +203,7 @@ with NanaSQLite("new_encrypted.db", encryption_key=raw_key) as new_db:
 ## エラーハンドリング
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteDatabaseError
+from nyansqlite import NanaSQLite, NanaSQLiteDatabaseError
 
 try:
     with NanaSQLite("secure.db", encryption_key=wrong_key) as db:

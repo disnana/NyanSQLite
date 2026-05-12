@@ -15,7 +15,7 @@ NanaSQLite は複数のキャッシュ戦略を提供し、ユースケースに
 デフォルトのキャッシュ戦略です。全データをメモリ上に保持し、最速のアクセスを実現します。
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # デフォルト: 無制限キャッシュ
 db = NanaSQLite("app.db")
@@ -47,7 +47,7 @@ db.load_all()
 Least Recently Used（最近最も使われていない）データを自動的に削除するキャッシュです。
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 # LRU キャッシュ: 最大 1000 件を保持
 db = NanaSQLite(
@@ -79,7 +79,7 @@ val = db.get_fresh("key1")  # キャッシュをバイパスしてDBから直接
 `lru-dict` パッケージがインストールされている場合、C 拡張による高速 LRU が自動的に使用されます。
 
 ```bash
-pip install nanasqlite[speed]  # lru-dict + orjson をインストール
+pip install nyansqlite[speed]  # lru-dict + orjson をインストール
 ```
 
 速度比較:
@@ -102,13 +102,13 @@ pip install nanasqlite[speed]  # lru-dict + orjson をインストール
 Time-To-Live（有効期限付き）キャッシュです。一定時間が経過すると自動的にデータが失効します。
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from nyansqlite import NanaSQLite, CacheType
 
 # TTL キャッシュ: 60 秒で失効
 db = NanaSQLite(
     "app.db",
     cache_strategy=CacheType.TTL,
-    cache_ttl=60.0,         # 秒単位
+    cache_ttl=60.0,  # 秒単位
 )
 ```
 
@@ -210,7 +210,8 @@ db.batch_delete(["k1", "k2"])
 `AsyncNanaSQLite` でも同じキャッシュ戦略が利用できます:
 
 ```python
-from nanasqlite import AsyncNanaSQLite, CacheType
+from nyansqlite import AsyncNanaSQLite, CacheType
+
 
 async def main():
     db = AsyncNanaSQLite(

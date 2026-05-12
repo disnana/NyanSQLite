@@ -19,13 +19,13 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 
-if os.path.isdir(os.path.join(SRC_DIR, "nanasqlite")) and SRC_DIR not in sys.path:
+if os.path.isdir(os.path.join(SRC_DIR, "nyansqlite")) and SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 try:
     from validkit import v
 
-    from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+    from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
     HAS_VALIDKIT = True
 except ImportError:
@@ -33,7 +33,7 @@ except ImportError:
     NanaSQLite = None  # type: ignore[assignment]
     NanaSQLiteValidationError = _MissingValidationError  # type: ignore[assignment]
     HAS_VALIDKIT = False
-    print("⚠️  validkit-py not installed. Install with: pip install nanasqlite[validation]")
+    print("⚠️  validkit-py not installed. Install with: pip install nyansqlite[validation]")
     sys.exit(1)
 
 

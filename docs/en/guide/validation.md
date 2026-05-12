@@ -22,18 +22,18 @@ Validation is useful when you want to:
 Install NanaSQLite with the validation extra:
 
 ```bash
-pip install nanasqlite[validation]
+pip install nyansqlite[validation]
 ```
 
 You can check whether the optional dependency is available at runtime:
 
 ```python
-from nanasqlite import HAS_VALIDKIT
+from nyansqlite import HAS_VALIDKIT
 
 if HAS_VALIDKIT:
     print("validkit-py is available")
 else:
-    print("Install nanasqlite[validation] to enable schema validation")
+    print("Install nyansqlite[validation] to enable schema validation")
 ```
 
 ## Basic Schema Validation
@@ -42,7 +42,7 @@ Pass a validkit schema to the `validator` parameter.
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {
     "name": v.str(),
@@ -67,7 +67,7 @@ except NanaSQLiteValidationError as exc:
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 schema = {
     "age": v.int().coerce(),
@@ -84,7 +84,7 @@ If the field validators do **not** use `.coerce()`, then `coerce=True` alone is 
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"age": v.int()}
 db = NanaSQLite("bad.db", validator=schema, coerce=True)
@@ -101,7 +101,7 @@ Different sub-tables can use different schemas. Child tables can also inherit th
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 user_schema = {"name": v.str(), "age": v.int()}
 score_schema = {"player": v.str(), "score": v.float().range(0.0, 100.0)}
@@ -121,7 +121,7 @@ Per-table coercion works the same way:
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite("app.db")
 coerce_schema = {"age": v.int().coerce()}
@@ -135,7 +135,7 @@ When a validator is configured, `batch_update()` validates the entire batch befo
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("batch.db", validator=schema)
@@ -153,7 +153,7 @@ If you want to **reject only the failed keys and still persist the valid ones**,
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("batch.db", validator=schema)
@@ -163,7 +163,7 @@ failed = db.batch_update_partial({
     "u2": {"name": "Bob", "age": "bad"},
 })
 
-print(failed)     # {"u2": "...validation..."}
+print(failed)  # {"u2": "...validation..."}
 print(db["u1"])  # persisted
 ```
 

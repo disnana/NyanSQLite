@@ -11,7 +11,7 @@
 ## インストール
 
 ```bash
-pip install nanasqlite
+pip install nyansqlite
 ```
 
 ## レッスン1: 最初のデータベース
@@ -19,7 +19,7 @@ pip install nanasqlite
 ### データベースの作成
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # データベースファイルを作成または開く
 db = NanaSQLite("tutorial.db")
@@ -31,7 +31,7 @@ db["pi"] = 3.14159
 
 # データを取得
 print(db["greeting"])  # こんにちは、世界！
-print(db["number"])    # 42
+print(db["number"])  # 42
 
 # 終了時にクローズ
 db.close()
@@ -45,7 +45,7 @@ db.close()
 ### コンテキストマネージャの使用
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # 自動的にデータベースをクローズ
 with NanaSQLite("tutorial.db") as db:
@@ -212,22 +212,24 @@ with NanaSQLite("tutorial.db") as db:
 
 ```python
 from pydantic import BaseModel
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
+
 
 class User(BaseModel):
     name: str
     age: int
     email: str
 
+
 with NanaSQLite("tutorial.db") as db:
     # Pydanticモデルを保存
     user = User(name="Alice", age=30, email="alice@example.com")
     db.set_model("user_alice", user)
-    
+
     # Pydanticモデルとして取得
     retrieved = db.get_model("user_alice", User)
-    print(retrieved.name)   # Alice
-    print(retrieved.age)    # 30
+    print(retrieved.name)  # Alice
+    print(retrieved.age)  # 30
     print(type(retrieved))  # <class '__main__.User'>
 ```
 
@@ -281,7 +283,7 @@ with NanaSQLite("tutorial.db") as db:
 ## レッスン7: エラーハンドリング
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 with NanaSQLite("tutorial.db") as db:
     # 存在しないキーを処理
@@ -289,12 +291,13 @@ with NanaSQLite("tutorial.db") as db:
         value = db["nonexistent"]
     except KeyError:
         print("キーが見つかりません！")
-    
+
     # より良い方法: デフォルト値付きでget()を使用
     value = db.get("nonexistent", "デフォルト")
-    
+
     # SQLエラーを処理
     import apsw
+
     try:
         db.execute("INVALID SQL")
     except apsw.Error as e:
@@ -325,7 +328,8 @@ FastAPIなどの非同期フレームワーク向け:
 
 ```python
 import asyncio
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     async with AsyncNanaSQLite("tutorial.db") as db:
@@ -333,13 +337,14 @@ async def main():
         await db.aset("user", {"name": "Alice"})
         user = await db.aget("user")
         print(user)
-        
+
         # 並行操作
         results = await asyncio.gather(
             db.aget("key1"),
             db.aget("key2"),
             db.aget("key3")
         )
+
 
 asyncio.run(main())
 ```
@@ -354,7 +359,7 @@ asyncio.run(main())
 `lock_timeout` を設定することで、ロックが一定時間内に取得できない場合に `NanaSQLiteLockError` を送出できます：
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteLockError
+from nyansqlite import NanaSQLite, NanaSQLiteLockError
 
 db = NanaSQLite("app.db", lock_timeout=2.0)  # 2秒待ってもロックが取れなければエラー
 

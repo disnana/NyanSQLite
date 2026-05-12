@@ -9,8 +9,8 @@ APSW の低レベル例外が漏洩する。
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.exceptions import NanaSQLiteClosedError
+from nyansqlite import NanaSQLite
+from nyansqlite.exceptions import NanaSQLiteClosedError
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

@@ -52,14 +52,14 @@ v2 モードでは書き込みをメモリバッファに積み、バックグ�
 ### 有効化
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # v2 モードを有効化（デフォルトは immediate フラッシュ）
 db = NanaSQLite("mydb.db", v2_mode=True)
 
 # 書き込みはメインスレッドをブロックしない
 db["user:1"] = {"name": "Alice", "score": 100}
-db["user:2"] = {"name": "Bob",   "score": 200}
+db["user:2"] = {"name": "Bob", "score": 200}
 
 # 読み込みはメモリキャッシュから即座に返る（ゼロレイテンシ）
 user = db["user:1"]
@@ -72,7 +72,7 @@ db.close()  # シャットダウン時に残っているバッファを SQLite �
 引数が多すぎる問題を解消するため、v2 関連の設定をまとめるための `V2Config` データクラスが導入されました。
 
 ```python
-from nanasqlite import NanaSQLite, V2Config
+from nyansqlite import NanaSQLite, V2Config
 
 # V2Config で設定をまとめる
 cfg = V2Config(
@@ -88,7 +88,7 @@ db = NanaSQLite("mydb.db", v2_mode=True, v2_config=cfg)
 ### 非同期 (AsyncNanaSQLite)
 
 ```python
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
 
 async with AsyncNanaSQLite("mydb.db", v2_mode=True) as db:
     await db.aset("key", "value")

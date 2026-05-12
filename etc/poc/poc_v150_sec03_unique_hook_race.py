@@ -11,8 +11,8 @@ import os
 import tempfile
 import threading
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import UniqueHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import UniqueHook
 
 
 def test_unique_hook_race():

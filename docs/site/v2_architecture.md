@@ -30,11 +30,11 @@ V2 エンジンは **デュアルレーン** 設計を採用しています:
 ## 有効化
 
 ```python
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 db = NanaSQLite(
     "app.db",
-    v2_mode=True,           # V2 エンジンを有効化
+    v2_mode=True,  # V2 エンジンを有効化
     flush_mode="immediate",  # フラッシュモード
 )
 ```
@@ -165,7 +165,7 @@ print(f"DLQ Count: {metrics['dlq_count']}")
 Strict レーンにカスタムタスクをエンキューできます:
 
 ```python
-from nanasqlite.v2_engine import StrictTask
+from nyansqlite.v2_engine import StrictTask
 
 # 優先度付きタスクをエンキュー
 task = StrictTask(
@@ -196,7 +196,8 @@ db._v2_engine.enqueue_strict_task(task)
 `AsyncNanaSQLite` でも V2 モードが使用できます:
 
 ```python
-from nanasqlite import AsyncNanaSQLite
+from nyansqlite import AsyncNanaSQLite
+
 
 async def main():
     db = AsyncNanaSQLite(

@@ -228,15 +228,18 @@ BUG-01 [Medium] __delitem__ の before_delete がロック外で呼ばれる
 """
 import threading
 import tempfile, os
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import BaseHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import BaseHook
+
 
 class LockInspectDeleteHook(BaseHook):
     def __init__(self):
         super().__init__()
         self.lock_held_during_delete = []
+
     def before_delete(self, db, key):
         self.lock_held_during_delete.append(db._lock._is_owned())
+
 
 fd, path = tempfile.mkstemp(suffix=".db")
 os.close(fd)

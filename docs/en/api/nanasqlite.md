@@ -631,20 +631,20 @@ Schema-based write validation powered by [validkit-py](https://github.com/disnan
 
 **Installation:**
 ```bash
-pip install nanasqlite[validation]
+pip install nyansqlite[validation]
 ```
 
 ### Basic Usage
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int().range(0, 150)}
 db = NanaSQLite("mydata.db", validator=schema)
 
-db["user"] = {"name": "Alice", "age": 30}        # OK
-db["user"] = {"name": "Bob", "age": "invalid"}   # → NanaSQLiteValidationError
+db["user"] = {"name": "Alice", "age": 30}  # OK
+db["user"] = {"name": "Bob", "age": "invalid"}  # → NanaSQLiteValidationError
 ```
 
 ### Auto-Conversion (coerce)
@@ -659,7 +659,7 @@ When `coerce=True`, the value coerced/converted by validkit-py is stored instead
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 # CORRECT: field validators have .coerce() + NanaSQLite has coerce=True
 schema = {"age": v.int().coerce(), "score": v.float().coerce()}
@@ -678,21 +678,21 @@ db_bad["user"] = {"age": "30"}  # → NanaSQLiteValidationError (type mismatch)
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
-user_schema  = {"name": v.str(), "age": v.int()}
+user_schema = {"name": v.str(), "age": v.int()}
 score_schema = {"player": v.str(), "score": v.float().range(0.0, 100.0)}
 
 db = NanaSQLite("app.db")
 
 # Apply a different schema to each sub-table
-users_db  = db.table("users",  validator=user_schema)
+users_db = db.table("users", validator=user_schema)
 scores_db = db.table("scores", validator=score_schema)
 
 # Inherit schema from parent automatically
-db2      = NanaSQLite("app2.db", validator=user_schema)
-child_db = db2.table("users2")              # inherits parent schema
-free_db  = db2.table("cache", validator=None)  # validation disabled
+db2 = NanaSQLite("app2.db", validator=user_schema)
+child_db = db2.table("users2")  # inherits parent schema
+free_db = db2.table("cache", validator=None)  # validation disabled
 
 # Per-table coerce: schema fields must also have .coerce() for conversion to work
 coerce_schema = {"age": v.int().coerce()}
@@ -706,7 +706,7 @@ When a `validator` is set, `batch_update()` validates **all** values before touc
 
 ```python
 from validkit import v
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 
 schema = {"name": v.str(), "age": v.int()}
 db = NanaSQLite("batch.db", validator=schema)
@@ -723,7 +723,7 @@ except NanaSQLiteValidationError:
 ### Checking the Feature Flag
 
 ```python
-from nanasqlite import HAS_VALIDKIT
+from nyansqlite import HAS_VALIDKIT
 
 if HAS_VALIDKIT:
     print("validkit-py is available")
@@ -734,7 +734,7 @@ else:
 ### Handling Validation Errors
 
 ```python
-from nanasqlite import NanaSQLite, NanaSQLiteValidationError
+from nyansqlite import NanaSQLite, NanaSQLiteValidationError
 from validkit import v
 
 schema = {"name": v.str(), "score": v.int().range(0, 100)}

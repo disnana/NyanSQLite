@@ -8,7 +8,7 @@ is not a real file path — it is SQLite's sentinel for an in-memory database.
 After the patch, get_db_size() detects the ":memory:" path and returns 0.
 """
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 with NanaSQLite(":memory:") as db:
     db["key1"] = {"value": 42}

@@ -13,7 +13,7 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../src"))
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 
 class UpperCaseHook:

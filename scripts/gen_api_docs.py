@@ -3,10 +3,10 @@ import re
 import sys
 from pathlib import Path
 
-# Add src to path so we can import nanasqlite
+# Add src to path so we can import nyansqlite
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import nanasqlite  # noqa: F401  # imported for side effects / inspection
+import nyansqlite  # noqa: F401  # imported for side effects / inspection
 
 METHOD_GROUPS = {
     "Constructor": ["__init__"],
@@ -430,8 +430,8 @@ def main():
     ja_dir, en_dir = root_dir, root_dir / "en"
     for d in [ja_dir, en_dir]:
         d.mkdir(parents=True, exist_ok=True)
-    from nanasqlite.async_core import AsyncNanaSQLite
-    from nanasqlite.core import NanaSQLite
+    from nyansqlite.async_core import AsyncNanaSQLite
+    from nyansqlite.core import NanaSQLite
 
     (ja_dir / "api_sync.md").write_text(
         generate_class_md(NanaSQLite, "同期 API リファレンス", "NanaSQLiteクラスの同期メソッド一覧です。", "ja"),

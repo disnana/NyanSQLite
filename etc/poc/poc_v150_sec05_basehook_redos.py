@@ -9,7 +9,7 @@ vulnerability in BaseHook._key_regex when malicious patterns are provided.
 import re
 import time
 
-from nanasqlite.hooks import BaseHook
+from nyansqlite.hooks import BaseHook
 
 
 def measure_regex_time(pattern, test_string):

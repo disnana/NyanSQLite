@@ -11,7 +11,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ValidationError, field_validator
 
-from nanasqlite import NanaSQLite
+from nyansqlite import NanaSQLite
 
 
 # Pydantic models

@@ -9,8 +9,8 @@ potentially masking critical errors and returning corrupted data.
 import os
 import tempfile
 
-from nanasqlite import NanaSQLite
-from nanasqlite.hooks import PydanticHook
+from nyansqlite import NanaSQLite
+from nyansqlite.hooks import PydanticHook
 
 
 class MockPydanticModel:
