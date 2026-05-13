@@ -1,75 +1,96 @@
 import apsw
-import orjson
+from pydantic import BaseModel, Field
+from typing import Annotated, Type, get_type_hints, Any, get_origin, List
+
+
+# インデックスや主キーを定義するためのカスタムメタデータ
+class SQLMetadata:
+    def __init__(self, primary_key: bool = False, index: bool = False, unique: bool = False):
+        self.primary_key = primary_key
+        self.index = index
+        self.unique = unique
+
 
 class NyanSQLite:
     def __init__(self, db_path: str):
-        # apsw.Connection は極めて高速でオーバーヘッドが少ない
         self.conn = apsw.Connection(db_path)
-        self._configure_pragmas()
+        self.cursor = self.conn.cursor()
 
-    def _configure_pragmas(self):
-        """パフォーマンスのための最適化設定"""
-        # apswではcursorを明示的に作成し、使い終わったらcloseする
-        c = self.conn.cursor()
-        try:
-            c.execute("PRAGMA journal_mode=WAL")
-            c.execute("PRAGMA synchronous=NORMAL")
-            c.execute("PRAGMA temp_store=MEMORY")
-            c.execute("PRAGMA cache_size=-64000")  # 64MBキャッシュ
-        finally:
-            c.close()
+    def _py_to_sql_type(self, py_type: Type) -> str:
+        """Pythonの型をSQLiteの型にマッピング"""
+        if issubclass(py_type, int):
+            return "INTEGER"
+        if issubclass(py_type, float):
+            return "REAL"
+        if issubclass(py_type, bool):
+            return "INTEGER"  # SQLite has no boolean
+        return "TEXT"
 
-    def execute(self, sql: str, bindings=None):
-        """SQLを実行する (書き込み用)"""
-        return self.conn.execute(sql, bindings or {})
+    def create_table(self, model: Type[BaseModel]):
+        table_name = model.__name__.lower()
+        columns = []
+        indices = []
 
-    def query(self, sql: str, bindings=None):
-        """クエリを実行してジェネレータで返す (読み取り用)"""
-        return self.conn.execute(sql, bindings or {})
+        # 型ヒントからAnnotatedの情報を抽出
+        hints = get_type_hints(model, include_extras=True)
 
-    # --- orjson 対応のヘルパー ---
-    def dumps(self, obj):
-        return orjson.dumps(obj)  # bytesで返す
+        for field_name, field_type in hints.items():
+            sql_type = "TEXT"
+            constraints = []
 
-    def loads(self, data):
-        return orjson.loads(data)
+            # AnnotatedからMetadataを抽出
+            if get_origin(field_type) is Annotated:
+                base_type, *metadata = field_type.__metadata__
+                sql_type = self._py_to_sql_type(get_type_hints(model)[field_name])
 
-    @staticmethod
-    def gen_col(json_col: str, key: str, data_type: str = "INTEGER") -> str:
-        """
-        生成列定義の文字列を生成するヘルパー
-        例: NyanSQLite.gen_col('data', 'score', 'INTEGER')
-        """
-        return f"{key} {data_type} GENERATED ALWAYS AS (json_extract({json_col}, '$.{key}')) STORED"
+                for meta in metadata:
+                    if isinstance(meta, SQLMetadata):
+                        if meta.primary_key:
+                            constraints.append("PRIMARY KEY")
+                        if meta.unique:
+                            constraints.append("UNIQUE")
+                        if meta.index and not meta.primary_key:
+                            indices.append(field_name)
+            else:
+                sql_type = self._py_to_sql_type(field_type)
 
-    def get_json_path(self, table: str, pk: int, column: str, path: str):
-        """
-        部分読み込み: json_extract で特定のキーだけを取得
-        path例: '$.user.name'
-        """
-        sql = f"SELECT json_extract({column}, ?) FROM {table} WHERE id = ?"
-        cursor = self.conn.execute(sql, (path, pk))
-        row = cursor.fetchone()
-        return row[0] if row else None
+            columns.append(f"{field_name} {sql_type} {' '.join(constraints)}")
 
-    def update_json_path(self, table: str, pk: int, column: str, path: str, value):
-        """
-        部分書き込み: json_set で特定のキーだけを更新
-        value: 数値や文字列ならそのまま。dictやlistの場合はJSON文字列として渡す
-        """
-        # 値が dict/list ならJSON文字列化する（SQLiteが受け取れるように）
-        if isinstance(value, (dict, list)):
-            value = orjson.dumps(value)
+        # テーブル作成
+        create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)});"
+        self.cursor.execute(create_sql)
 
-        sql = f"UPDATE {table} SET {column} = json_set({column}, ?, ?) WHERE id = ?"
-        self.conn.execute(sql, (path, value, pk))
+        # インデックス作成
+        for col in indices:
+            idx_sql = f"CREATE INDEX IF NOT EXISTS idx_{table_name}_{col} ON {table_name}({col});"
+            self.cursor.execute(idx_sql)
 
-    def remove_json_path(self, table: str, pk: int, column: str, path: str):
-        """
-        キーの削除: json_remove
-        """
-        sql = f"UPDATE {table} SET {column} = json_remove({column}, ?) WHERE id = ?"
-        self.conn.execute(sql, (path, pk))
+    def insert(self, data: BaseModel):
+        table_name = data.__class__.__name__.lower()
+        fields = data.model_dump()
+        keys = list(fields.keys())
+        values = list(fields.values())
 
-    def close(self):
-        self.conn.close()
+        placeholders = ", ".join(["?"] * len(keys))
+        sql = f"INSERT INTO {table_name} ({', '.join(keys)}) VALUES ({placeholders})"
+        self.cursor.execute(sql, values)
+
+    def bulk_insert(self, data_list: List[BaseModel]):
+        if not data_list:
+            return
+
+        # 最初の要素からテーブル名とフィールド名を抽出
+        table_name = data_list[0].__class__.__name__.lower()
+        fields = data_list[0].model_dump().keys()
+
+        # SQL文の構築
+        keys = list(fields)
+        placeholders = ", ".join(["?"] * len(keys))
+        sql = f"INSERT INTO {table_name} ({', '.join(keys)}) VALUES ({placeholders})"
+
+        # モデルから値のタプルリストに変換
+        rows = [tuple(item.model_dump().values()) for item in data_list]
+
+        # トランザクション内で実行
+        with self.conn:
+            self.cursor.executemany(sql, rows)
