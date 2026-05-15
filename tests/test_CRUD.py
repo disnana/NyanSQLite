@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 from pydantic import BaseModel
 
-from nyansqlite import Indexed, NyanSQLite
+from nyansqlite import Indexed, NyanSQLite, Searchable
 
 
 class User(BaseModel):
@@ -94,3 +94,55 @@ def test_complex_query(db):
     results = db.query(User, age__lt=30)
     assert len(results) == 1
     assert results[0].name == 'Taro'
+
+def test_insert_many(db):
+    """Test bulk insertion."""
+    users = [
+        User(id=20, name='User20', age=20),
+        User(id=21, name='User21', age=21),
+        User(id=22, name='User22', age=22),
+    ]
+    count = db.insert_many(users)
+    assert count == 3
+    assert db.count(User) == 3
+
+    # Verify data
+    results = db.query(User, order_by="id")
+    assert results[0].name == 'User20'
+    assert results[1].name == 'User21'
+    assert results[2].name == 'User22'
+
+def test_insert_many_empty(db):
+    """Test bulk insertion with empty list."""
+    count = db.insert_many([])
+    assert count == 0
+    assert db.count(User) == 0
+
+def test_search_and_rebuild(db):
+    """Test FTS5 search and rebuild_fts."""
+    class Article(BaseModel):
+        id: Optional[int] = None
+        title: Searchable[str]
+        content: Searchable[str]
+
+    db.register(Article)
+    
+    articles = [
+        Article(id=1, title="Python Guide", content="Learn Python basics"),
+        Article(id=2, title="SQLite Tips", content="Advanced SQLite techniques"),
+        Article(id=3, title="Coding", content="Write clean code"),
+    ]
+    db.insert_many(articles)
+
+    # Search
+    results = db.search(Article, "Python")
+    assert len(results) == 1
+    assert results[0].title == "Python Guide"
+
+    # Rebuild FTS (no error should occur)
+    db.rebuild_fts(Article)
+
+    # Search again
+    results = db.search(Article, "SQLite")
+    assert len(results) == 1
+    assert results[0].title == "SQLite Tips"
