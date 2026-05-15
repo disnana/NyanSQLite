@@ -1,5 +1,5 @@
-import unittest
 import os
+import unittest
 from nyansqlite import NyanSQLite # Assuming NyanSQLite is the main class/module
 
 class TestCRUD(unittest.TestCase):
