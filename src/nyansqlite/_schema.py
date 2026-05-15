@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Optional, Tuple, List
 
 from pydantic import BaseModel
 
@@ -21,7 +21,7 @@ def model_to_table_name(model: type[BaseModel]) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", model.__name__).lower()
 
 
-def get_primary_key(model: type[BaseModel]) -> str | None:
+def get_primary_key(model: type[BaseModel]) -> Optional[str]:
     """Return the primary-key field name, or ``None`` (rowid implicit)."""
     # Explicit override
     pk = getattr(model, "__nyan_primary_key__", None)
@@ -97,7 +97,7 @@ def model_to_indexes(model: type[BaseModel]) -> list[str]:
 
 # ── FTS5 virtual table + sync triggers ────────────────────────────────── #
 
-def model_to_fts5(model: type[BaseModel]) -> tuple[str | None, list[str]]:
+def model_to_fts5(model: type[BaseModel]) -> Tuple[Optional[str], List[str]]:
     """Return ``(CREATE VIRTUAL TABLE stmt | None, [trigger stmts])``."""
     table  = model_to_table_name(model)
     hints  = model_hints(model)

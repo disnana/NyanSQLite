@@ -42,23 +42,19 @@ def resolve_type(annotation: Any) -> tuple[Any, bool]:
 
     origin = get_origin(inner)
 
-    # typing.Union / Optional[T]
-    if origin is Union:
+    # typing.Union / Optional[T] / Python 3.10+ T | None
+    if origin is Union or (sys.version_info >= (3, 10) and _is_union_type(inner)):
         args = get_args(inner)
         non_none = [a for a in args if a is not type(None)]
         is_opt = type(None) in args
         return (non_none[0] if len(non_none) == 1 else inner), is_opt
 
-    # Python 3.10+  ``T | None`` syntax
-    if sys.version_info >= (3, 10):
-        import types as _types
-        if isinstance(inner, _types.UnionType):
-            args = get_args(inner)
-            non_none = [a for a in args if a is not type(None)]
-            is_opt = type(None) in args
-            return (non_none[0] if len(non_none) == 1 else inner), is_opt
-
     return inner, False
+
+
+def _is_union_type(tp: Any) -> bool:
+    import types
+    return isinstance(tp, types.UnionType)
 
 
 # ── Python → SQLite type map ───────────────────────────────────────────── #

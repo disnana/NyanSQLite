@@ -1,9 +1,10 @@
 import pytest
+from typing import Optional
 from pydantic import BaseModel
 from nyansqlite import NyanSQLite, Indexed
 
 class User(BaseModel):
-    id: int | None = None
+    id: Optional[int] = None
     name: Indexed[str]
     age: int
 

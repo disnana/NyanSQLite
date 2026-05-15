@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, TypeVar
+from typing import Any, TypeVar, Optional
 
 from pydantic import BaseModel
 
@@ -75,13 +75,13 @@ def _build_where(kwargs: dict[str, Any]) -> tuple[str, list[Any]]:
     return "WHERE " + " AND ".join(clauses), values
 
 
-def _order_sql(order_by: str | None, desc: bool) -> str:
+def _order_sql(order_by: Optional[str], desc: bool) -> str:
     if not order_by:
         return ""
     return f' ORDER BY "{order_by}" {"DESC" if desc else "ASC"}'
 
 
-def _limit_sql(limit: int | None, offset: int | None) -> str:
+def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
     sql = ""
     if limit  is not None: sql += f" LIMIT {int(limit)}"
     if offset is not None: sql += f" OFFSET {int(offset)}"
@@ -96,9 +96,9 @@ class _Meta:
     def __init__(
         self,
         table:      str,
-        pk:         str | None,
+        pk:         Optional[str],
         hints:      dict[str, Any],
-        fts_table:  str | None,
+        fts_table:  Optional[str],
         fts_fields: list[str],
     ):
         self.table      = table
@@ -284,7 +284,7 @@ class NyanSQLite:
 
     # ── GET / QUERY ───────────────────────────────────────────────────── #
 
-    def get(self, model: type[M], **kwargs: Any) -> M | None:
+    def get(self, model: type[M], **kwargs: Any) -> Optional[M]:
         """Fetch the first matching row as a Pydantic model, or ``None``.
 
         Example::
@@ -299,9 +299,9 @@ class NyanSQLite:
         self,
         model:    type[M],
         *,
-        limit:    int | None = None,
-        offset:   int | None = None,
-        order_by: str | None = None,
+        limit:    Optional[int] = None,
+        offset:   Optional[int] = None,
+        order_by: Optional[str] = None,
         desc:     bool = False,
         **kwargs: Any,
     ) -> list[M]:
@@ -338,9 +338,9 @@ class NyanSQLite:
         model:    type[BaseModel],
         fields:   list[str],
         *,
-        limit:    int | None = None,
-        offset:   int | None = None,
-        order_by: str | None = None,
+        limit:    Optional[int] = None,
+        offset:   Optional[int] = None,
+        order_by: Optional[str] = None,
         desc:     bool = False,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
@@ -377,7 +377,7 @@ class NyanSQLite:
         model:  type[M],
         query:  str,
         *,
-        limit:  int | None = None,
+        limit:  Optional[int] = None,
     ) -> list[M]:
         """Full-text search on all ``Searchable[str]`` fields.
 
