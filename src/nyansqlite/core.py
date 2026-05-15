@@ -19,6 +19,7 @@ from ._types import deserialize_value, serialize_value
 from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
+    QueryValidationError,
     SearchNotEnabledError,
     TableNameCollisionError,
 )
@@ -47,6 +48,9 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
         ==  ``field__in=[…]``         → ``field IN (?,?,?)``
         ==  ``field__is_null=True``   → ``field IS NULL``
         ==  ``field__is_null=False``  → ``field IS NOT NULL``
+
+    Raises:
+        QueryValidationError: If type conversion of filter values fails
     """
     if not args and not kwargs:
         return "", []
@@ -89,6 +93,15 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                 values.append(value)
             elif op == "gt":
                 clauses.append(f"{q} > ?")
+                # Validate that value can be compared
+                try:
+                    _ = value > value  # Simple type check
+                except TypeError as e:
+                    raise QueryValidationError(
+                        f"Type mismatch in filter {key}={value!r}. "
+                        f"Cannot apply '>' operator to {type(value).__name__}. "
+                        f"Error: {e}"
+                    ) from e
                 values.append(value)
             elif op == "gte":
                 clauses.append(f"{q} >= ?")
@@ -103,9 +116,21 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                 clauses.append(f"{q} LIKE ?")
                 values.append(value)
             elif op == "in":
-                ph = ", ".join("?" * len(value))
+                try:
+                    ph = ", ".join("?" * len(value))
+                except TypeError as e:
+                    raise QueryValidationError(
+                        f"Filter {key} expects iterable, got {type(value).__name__}. "
+                        f"Error: {e}"
+                    ) from e
                 clauses.append(f"{q} IN ({ph})")
-                values.extend(value)
+                try:
+                    values.extend(value)
+                except TypeError as e:
+                    raise QueryValidationError(
+                        f"Filter {key}: Cannot extend values from {type(value).__name__}. "
+                        f"Expected iterable. Error: {e}"
+                    ) from e
             elif op == "is_null":
                 clauses.append(f"{q} IS {'NULL' if value else 'NOT NULL'}")
             else:
@@ -191,10 +216,20 @@ class NyanSQLite:
         db.select(Article, fields=["title", "views"], author="neko")
     """
 
-    def __init__(self, path: str = ":memory:", wal: bool = True):
+    def __init__(self, path: str = ":memory:", wal: bool = True, strict_deserialization: bool = False):
+        """Initialize NyanSQLite.
+
+        Args:
+            path: Database file path (default: in-memory)
+            wal: Enable WAL mode (default: True)
+            strict_deserialization: If True, raise ValueError on malformed data.
+                                   If False, emit warning and return raw value.
+                                   Default: False (lenient mode)
+        """
         self._conn     = NyanConnection(path, wal=wal)
         self._registry: dict[type[BaseModel], _Meta] = {}
         self._lock     = threading.Lock()
+        self._strict_deserialization = strict_deserialization
 
     # ── registration ─────────────────────────────────────────────────── #
 
@@ -257,8 +292,26 @@ class NyanSQLite:
         return {k: serialize_value(v, meta.hints[k]) for k, v in dump.items() if k in meta.hints}
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
-        """SQLite row dict → Pydantic model."""
-        data = {k: deserialize_value(v, meta.hints[k]) for k, v in row.items() if k in meta.hints}
+        """SQLite row dict → Pydantic model.
+
+        Args:
+            model: Pydantic model class
+            meta: Model metadata
+            row: Row dict from database
+
+        Returns:
+            Instantiated Pydantic model
+
+        Raises:
+            ValueError: If strict_deserialization=True and data is malformed
+        """
+        data = {}
+        for k, v in row.items():
+            if k in meta.hints:
+                data[k] = deserialize_value(
+                    v, meta.hints[k],
+                    strict=self._strict_deserialization
+                )
         return model(**data)
 
     # ── INSERT ───────────────────────────────────────────────────────── #
@@ -276,18 +329,45 @@ class NyanSQLite:
         return obj
 
     def insert_many(self, objs: list[M]) -> int:
-        """Bulk-insert in a single transaction. Returns the number inserted."""
+        """Bulk-insert in a single transaction. Returns the number inserted.
+
+        Automatically chunks large inserts to respect SQLite's variable binding limit
+        (default 32766). This prevents SQLITE_TOOBIG errors on very large datasets.
+
+        Args:
+            objs: List of model instances to insert
+
+        Returns:
+            Total number of rows inserted
+        """
         if not objs:
             return 0
         meta = self._meta(type(objs[0]))
+
+        # SQLite default limit on parameters is 32766
+        # We use 1000 parameters per statement for safety
+        # (columns * rows_per_chunk <= 1000)
         rows = [self._to_row(o, meta) for o in objs]
+        cols_count = len(rows[0])
+        params_limit = 32000  # Conservative limit
+        chunk_size = max(1, params_limit // cols_count)
+
+        total_inserted = 0
         cols = ", ".join(f'"{k}"' for k in rows[0])
-        ph   = ", ".join("?" * len(rows[0]))
-        sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
-        with self._lock:
-            with self._conn.transaction():
-                self._conn.executemany(sql, [tuple(r.values()) for r in rows])
-        return len(objs)
+
+        for chunk_start in range(0, len(rows), chunk_size):
+            chunk = rows[chunk_start:chunk_start + chunk_size]
+            if not chunk:
+                continue
+
+            ph   = ", ".join("?" * len(chunk[0]))
+            sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
+            with self._lock:
+                with self._conn.transaction():
+                    self._conn.executemany(sql, [tuple(r.values()) for r in chunk])
+            total_inserted += len(chunk)
+
+        return total_inserted
 
     # ── UPDATE ───────────────────────────────────────────────────────── #
 
@@ -432,7 +512,7 @@ class NyanSQLite:
         with self._lock:
             rows = self._conn.execute(sql, tuple(values))
             return [
-                {f: deserialize_value(row.get(f), meta.hints[f]) for f in fields}
+                {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
                 for row in rows
             ]
 

@@ -1,6 +1,6 @@
-# Cache Strategies Guide
+﻿# Cache Strategies Guide
 
-NanaSQLite provides multiple caching strategies to achieve optimal performance for your use case.
+NyanSQLite provides multiple caching strategies to achieve optimal performance for your use case.
 
 ## Cache Types Overview
 
@@ -15,13 +15,13 @@ NanaSQLite provides multiple caching strategies to achieve optimal performance f
 The default caching strategy. Keeps all data in memory for the fastest possible access.
 
 ```python
-from nanasqlite import NanaSQLite
+from NyanSQLite import NyanSQLite
 
 # Default: unbounded cache
-db = NanaSQLite("app.db")
+db = NyanSQLite("app.db")
 
 # Explicitly specifying
-db = NanaSQLite("app.db", cache_strategy="unbounded")
+db = NyanSQLite("app.db", cache_strategy="unbounded")
 ```
 
 ### Characteristics
@@ -32,7 +32,7 @@ db = NanaSQLite("app.db", cache_strategy="unbounded")
 
 ```python
 # Bulk-load all data into cache at startup
-db = NanaSQLite("app.db", bulk_load=True)
+db = NyanSQLite("app.db", bulk_load=True)
 
 # Load all data into cache later
 db.load_all()
@@ -47,10 +47,10 @@ db.load_all()
 Least Recently Used cache that automatically evicts the oldest-accessed entries.
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from NyanSQLite import NyanSQLite, CacheType
 
 # LRU cache: keep at most 1000 entries
-db = NanaSQLite(
+db = NyanSQLite(
     "app.db",
     cache_strategy=CacheType.LRU,
     cache_size=1000,
@@ -68,7 +68,7 @@ db = NanaSQLite(
 When the `lru-dict` package is installed, a C-extension-based fast LRU is automatically used.
 
 ```bash
-pip install nanasqlite[speed]  # Installs lru-dict + orjson
+pip install NyanSQLite[speed]  # Installs lru-dict + orjson
 ```
 
 ### Recommended Settings
@@ -84,10 +84,10 @@ pip install nanasqlite[speed]  # Installs lru-dict + orjson
 Time-To-Live cache that automatically expires data after a specified duration.
 
 ```python
-from nanasqlite import NanaSQLite, CacheType
+from NyanSQLite import NyanSQLite, CacheType
 
 # TTL cache: expire after 60 seconds
-db = NanaSQLite(
+db = NyanSQLite(
     "app.db",
     cache_strategy=CacheType.TTL,
     cache_ttl=60.0,
@@ -108,7 +108,7 @@ db = NanaSQLite(
 Set `cache_persistence_ttl=True` to trigger a write-back to the database when a TTL entry expires.
 
 ```python
-db = NanaSQLite(
+db = NyanSQLite(
     "app.db",
     cache_strategy="ttl",
     cache_ttl=60.0,

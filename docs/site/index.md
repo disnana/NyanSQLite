@@ -2,31 +2,31 @@
 layout: home
 
 hero:
-  name: "NanaSQLite"
-  text: "高性能キャッシュ搭載 SQLiteベース・ディクトラッパー"
-  tagline: "SQLiteを辞書感覚で。<br>高速、安全、スレッドセーフなPythonライブラリ。"
+  name: "NyanSQLite"
+  text: "Pydanticネイティブ SQLiteラッパー"
+  tagline: "Pydanticモデルをそのままデータベーススキーマに。<br>型安全、高性能、全文検索対応。"
   image:
     src: /logo.svg
-    alt: NanaSQLite Logo
+    alt: NyanSQLite Logo
   actions:
     - theme: brand
       text: 今すぐ始める
       link: /guide
     - theme: alt
       text: GitHub
-      link: https://github.com/disnana/NanaSQLite
+      link: https://github.com/disnana/NyanSQLite
 
 features:
-  - title: "高速メモリキャッシュ"
-    details: "UNBOUNDED・LRU・TTL の 3 つのキャッシュ戦略に対応。遅延ロード・一括ロード、lru-dict C 拡張による高速化もサポート。"
-  - title: "セキュリティと暗号化"
-    details: "厳格なSQL検証に加え、AES-GCM/ChaCha20/Fernetによる透過的暗号化 (v1.3+) を標準装備。機密データを強力に保護します。"
-  - title: "非同期 (Async) 対応"
-    details: "独自のスレッドプールにより、FastAPI等の非同期開発で最高のパフォーマンスを発揮します。"
-  - title: "直感的なAPI"
-    details: "Pythonの辞書そのもの。ボイラープレートなしで永続化を実現します。"
-  - title: "V2 非ブロッキングエンジン"
-    details: "デュアルレーン書き込みバックアーキテクチャ。ステージングバッファ・優先度キュー・Dead Letter Queue を備えた書き込み負荷の高いワークロードに最適。"
+  - title: "Pydanticネイティブ"
+    details: "Pydanticモデルを登録するだけでテーブルを自動生成。型ヒントをそのままスキーマとして活用できます。"
+  - title: "型安全なバリデーション"
+    details: "データの挿入・更新時にPydanticの強力なバリデーションが自動実行され、データの整合性を保証します。"
+  - title: "Djangoライクなクエリ"
+    details: "SQLを書かずに `name__like` や `age__gt` といった直感的なキーワード引数で複雑な検索が可能です。"
+  - title: "高性能な全文検索"
+    details: "SQLiteのFTS5をサポート。`Searchable` アノテーションを付けるだけで高速なテキスト検索を導入できます。"
+  - title: "自動シリアライズ"
+    details: "リストや辞書、datetime、Enumなどの複雑な型も自動的にJSONシリアライズして透過的に保存・取得できます。"
   - title: "充実したドキュメント"
-    details: "日本語・英語のバイリンガルドキュメント。キャッシュ戦略・暗号化・V2 アーキテクチャ・例外クラス・セキュリティ監査を網羅。"
+    details: "日本語・英語のバイリンガルドキュメント。チュートリアルからベストプラクティスまで網羅しています。"
 ---

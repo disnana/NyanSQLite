@@ -1,14 +1,14 @@
-# AsyncNanaSQLite API Reference
+﻿# AsyncNyanSQLite API Reference
 
-Complete documentation for the asynchronous `AsyncNanaSQLite` class.
+Complete documentation for the asynchronous `AsyncNyanSQLite` class.
 
-## Class: `AsyncNanaSQLite`
+## Class: `AsyncNyanSQLite`
 
 ```python
-class AsyncNanaSQLite
+class AsyncNyanSQLite
 ```
 
-A non-blocking, async wrapper for `NanaSQLite`.
+A non-blocking, async wrapper for `NyanSQLite`.
 It delegates all database operations to a thread pool executor, ensuring that the main asyncio event loop is never blocked. This is essential for high-concurrency applications like FastAPI or discord.py bots.
 
 ---
@@ -26,7 +26,7 @@ def __init__(
     optimize: bool = True,
     cache_size_mb: int = 64,
     max_workers: int = 5,
-    thread_name_prefix: str = "AsyncNanaSQLite",
+    thread_name_prefix: str = "AsyncNyanSQLite",
     strict_sql_validation: bool = True,
     allowed_sql_functions: list[str] | None = None,
     forbidden_sql_functions: list[str] | None = None,
@@ -37,7 +37,7 @@ def __init__(
 )
 ```
 
-Initializes the AsyncNanaSQLite interface.
+Initializes the AsyncNyanSQLite interface.
 
 **Parameters:**
 
@@ -47,8 +47,8 @@ Initializes the AsyncNanaSQLite interface.
   - Increase this for high-concurrency read workloads.
 - `read_pool_size` (int, optional): Size of the dedicated read-only connection pool. Defaults to `0` (disabled).
   - Enable this (e.g., `read_pool_size=4`) to allow concurrent reads to bypass the write lock.
-- `strict_sql_validation`, `allowed_sql_functions`, etc.: Same security parameters as `NanaSQLite`.
-- `validator` (dict | Schema | None, optional): A validkit-py validation schema. Behaves identically to the `validator` parameter of `NanaSQLite`. Validates values on every write and raises `NanaSQLiteValidationError` on schema violations. Requires `pip install nanasqlite[validation]`. (v1.3.4b2+)
+- `strict_sql_validation`, `allowed_sql_functions`, etc.: Same security parameters as `NyanSQLite`.
+- `validator` (dict | Schema | None, optional): A validkit-py validation schema. Behaves identically to the `validator` parameter of `NyanSQLite`. Validates values on every write and raises `NyanSQLiteValidationError` on schema violations. Requires `pip install NyanSQLite[validation]`. (v1.3.4b2+)
 - `coerce` (bool, optional): When `True`, the coerced/converted value returned by validkit-py is stored instead of the original. **Important**: Field validators in the schema must also have `.coerce()` (e.g., `v.int().coerce()`) for type conversion to occur. Only has effect when `validator` is also set. Defaults to `False`. (v1.3.4b2+)
 
 ---
@@ -68,10 +68,10 @@ Closes the database connection and shuts down the thread pool.
 ```python
 async def table(self, table_name: str,
                 validator: Any | None = ...,
-                coerce: bool = ...) -> AsyncNanaSQLite
+                coerce: bool = ...) -> AsyncNyanSQLite
 ```
 
-Asynchronously creates a new `AsyncNanaSQLite` instance for a sub-table.
+Asynchronously creates a new `AsyncNyanSQLite` instance for a sub-table.
 Shares the thread pool and connection with the parent.
 
 **Parameters:**
@@ -260,7 +260,7 @@ async with db.transaction():
 
 ## Querying & SQL
 
-All SQL and query methods available in `NanaSQLite` are available here as `async` methods.
+All SQL and query methods available in `NyanSQLite` are available here as `async` methods.
 
 ### `query` (Alias: `aquery`)
 ```python
@@ -421,7 +421,7 @@ async def get_model(self, key: str, model_class: type = None) -> Any
 
 ```python
 @property
-def sync_db(self) -> NanaSQLite | None
+def sync_db(self) -> NyanSQLite | None
 ```
-Access to the underlying synchronous `NanaSQLite` instance.
+Access to the underlying synchronous `NyanSQLite` instance.
 **Warning**: Calling methods on `sync_db` from an async function will block the event loop. Use with caution.

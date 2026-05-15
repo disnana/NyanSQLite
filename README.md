@@ -77,6 +77,16 @@ for hit in results:
 db.close()
 ```
 
+### ⚙️ コンストラクタオプション
+
+```python
+db = NyanSQLite(
+    path=":memory:",              # DBファイルのパス（デフォルト：インメモリ）
+    wal=True,                     # WALモード有効化（デフォルト：True）
+    strict_deserialization=False  # 厳格なデータ検証（デフォルト：False）
+)
+```
+
 ### 🔍 クエリ演算子リファレンス
 
 ```python
@@ -152,14 +162,105 @@ NyanSQLiteは以下の最適化を実装しています：
 - **WAL モード**: 読み書き同時実行性の向上
 - **トランザクション**: `insert_many()` はデフォルトでトランザクション内で実行
 - **パラメータ化クエリ**: SQL インジェクション対策も兼ねた安全性
+- **自動チャンキング**: SQLiteの32766プレースホルダ上限を超える大量データは自動分割
 
 ```python
 # 10万件をわずか０秒台で挿入（バッチ処理）
 import time
 players = [Player(player_id=i, ...) for i in range(100000)]
 start = time.time()
-db.insert_many(players)
+db.insert_many(players)  # 自動的に適切なサイズにチャンク分割される
 print(f"Inserted in {time.time() - start:.4f}s")  # 例: 0.3456s
+```
+
+### 🔒 セキュリティ機能（v1.0.0 以降）
+
+#### マルチスレッド対応
+
+すべてのデータベース操作は `threading.Lock` で保護されており、複数スレッドからの安全なアクセスをサポートしています。
+
+```python
+import threading
+from nyansqlite import NyanSQLite
+
+db = NyanSQLite("thread_safe.db")
+db.register(Article)
+
+def worker():
+    # 複数スレッドから安全に実行可能
+    db.query(Article, ...)
+    db.insert(Article(...))
+
+threads = [threading.Thread(target=worker) for _ in range(10)]
+for t in threads: t.start()
+for t in threads: t.join()
+```
+
+#### 破損データの安全な処理（`strict_deserialization`）
+
+DB内に不正なJSONや日付フォーマットが混入した場合、2つのモードから選択できます：
+
+**寛容モード（デフォルト）:** 警告を出力して生データを返す
+
+```python
+db = NyanSQLite("app.db", strict_deserialization=False)
+
+# DBに不正なJSON { invalid } が混入していても
+articles = db.query(Article)
+# RuntimeWarning: Malformed JSON data: '{ invalid }'. Returning as raw string.
+# → 処理は継続され、その値は文字列として返される
+```
+
+**厳格モード:** デシリアライズエラーで例外を発生
+
+```python
+db = NyanSQLite("app.db", strict_deserialization=True)
+
+try:
+    articles = db.query(Article)
+except ValueError as e:
+    # ValueError: Malformed JSON data: '{ invalid }'. Cannot deserialize as dict.
+    print(f"Data corruption: {e}")
+    # アプリケーションで適切にハンドリング可能
+```
+
+**使い分け:**
+- 寛容モード：部分的な破損データでも処理を続けたい場合（ログ解析など）
+- 厳格モード：データ整合性が重要で、破損があったら即座に検出したい場合（金額管理など）
+
+#### クエリパラメータの検証
+
+不正なクエリパラメータ（型の不一致など）は `QueryValidationError` として検出されます。
+
+```python
+from nyansqlite import QueryValidationError
+
+try:
+    # 型が不正な場合は例外が発生
+    db.query(Article, views__gt="not_a_number")
+except QueryValidationError as e:
+    print(f"Invalid query parameter: {e}")
+```
+
+#### テーブル名衝突の検知
+
+異なるモデルが同じテーブル名にマッピングされる場合、登録時に `TableNameCollisionError` が発生します：
+
+```python
+from nyansqlite import TableNameCollisionError
+
+class UserAuth(BaseModel):
+    id: int
+
+class User_Auth(BaseModel):  # CamelCase正規化でも user_auth になる
+    id: int
+
+db.register(UserAuth)
+try:
+    db.register(User_Auth)  # TableNameCollisionError が発生
+except TableNameCollisionError as e:
+    print(f"Collision detected: {e}")
+    # 解決策：__nyan_primary_key__ で明示的にテーブル名を指定
 ```
 
 ### 🛠️ 高度な機能
@@ -306,10 +407,125 @@ db.close()
 - `vacuum()` – Optimize database file
 - `close()` – Close connection
 
+**Constructor Options:**
+
+```python
+db = NyanSQLite(
+    path=":memory:",              # Database file path (default: in-memory)
+    wal=True,                     # Enable WAL mode (default: True)
+    strict_deserialization=False  # Strict data validation (default: False)
+)
+```
+
+### 📊 Performance
+
+NyanSQLite implements the following optimizations:
+
+- **WAL Mode**: Improved concurrent read/write performance
+- **Transactions**: `insert_many()` runs within a transaction by default
+- **Parameterized Queries**: SQL injection prevention
+- **Auto-Chunking**: Large datasets exceeding SQLite's 32766 parameter limit are automatically split
+
+```python
+# Insert 100,000 records in seconds (batch processing)
+import time
+posts = [Post(id=i, title=f"Post {i}", author="neko") for i in range(100000)]
+start = time.time()
+db.insert_many(posts)  # Automatically chunks large datasets
+print(f"Inserted in {time.time() - start:.4f}s")  # Example: 0.3456s
+```
+
+### 🔒 Security Features (v1.0.0+)
+
+#### Multi-threaded Safety
+
+All database operations are protected by `threading.Lock`, ensuring safe concurrent access from multiple threads:
+
+```python
+import threading
+from nyansqlite import NyanSQLite
+
+db = NyanSQLite("thread_safe.db")
+db.register(Post)
+
+def worker():
+    # Safe to call from multiple threads
+    db.query(Post, ...)
+    db.insert(Post(...))
+
+threads = [threading.Thread(target=worker) for _ in range(10)]
+for t in threads: t.start()
+for t in threads: t.join()
+```
+
+#### Graceful Data Corruption Handling with `strict_deserialization`
+
+If the database contains malformed JSON or invalid date formats, NyanSQLite can handle them in two ways:
+
+**Lenient Mode (default):** Emits a warning and returns raw data:
+
+```python
+db = NyanSQLite("app.db", strict_deserialization=False)
+
+# If DB has invalid JSON like { "invalid": ... }
+# It will print a RuntimeWarning but continue processing
+articles = db.query(Article)
+# Output: RuntimeWarning: Malformed JSON data: '{ "invalid": ... }'. Returning as raw string.
+```
+
+**Strict Mode:** Raises `ValueError` on deserialization failure:
+
+```python
+db = NyanSQLite("app.db", strict_deserialization=True)
+
+try:
+    # Will raise ValueError if any record has corrupted data
+    articles = db.query(Article)
+except ValueError as e:
+    print(f"Data corruption detected: {e}")
+    # Application can then handle the error appropriately
+```
+
+Use **strict mode** for critical applications where data integrity validation is mandatory, and **lenient mode** for scenarios where partial data recovery is acceptable.
+
+#### Query Parameter Validation
+
+Invalid query parameters (type mismatches) are caught and reported as `QueryValidationError`:
+
+```python
+from nyansqlite import QueryValidationError
+
+try:
+    # TypeError if parameter type is invalid
+    db.query(Post, views__gt="not_a_number")
+except QueryValidationError as e:
+    print(f"Invalid query parameter: {e}")
+```
+
+#### Table Name Collision Detection
+
+If different models map to the same table name, `TableNameCollisionError` is raised at registration time:
+
+```python
+from nyansqlite import TableNameCollisionError
+
+class UserAuth(BaseModel):
+    id: int
+
+class User_Auth(BaseModel):  # Both normalize to 'user_auth'
+    id: int
+
+db.register(UserAuth)
+try:
+    db.register(User_Auth)  # TableNameCollisionError
+except TableNameCollisionError as e:
+    print(f"Table name collision: {e}")
+
 ### 🔗 Resources
 
 - **Repository**: [github.com/disnana/nyansqlite](https://github.com/disnana/nyansqlite)
 - **Issues**: [Report bugs](https://github.com/disnana/nyansqlite/issues)
+- **Security**: Thread-safe, injection-resistant, with data corruption handling
 
 ---
 

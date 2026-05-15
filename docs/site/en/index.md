@@ -2,31 +2,31 @@
 layout: home
 
 hero:
-  name: "NanaSQLite"
-  text: "High-Performance SQLite Dict Wrapper with Caching"
-  tagline: "Use SQLite like a Dictionary.<br>Fast, Safe, Thread-Safe Python Library."
+  name: "NyanSQLite"
+  text: "Pydantic-native SQLite Wrapper"
+  tagline: "Pydantic models as database schemas.<br>Type-safe, High-performance, Full-text search enabled."
   image:
     src: /logo.svg
-    alt: NanaSQLite Logo
+    alt: NyanSQLite Logo
   actions:
     - theme: brand
       text: Get Started
       link: /en/guide
     - theme: alt
       text: GitHub
-      link: https://github.com/disnana/NanaSQLite
+      link: https://github.com/disnana/NyanSQLite
 
 features:
-  - title: "Fast Memory Caching"
-    details: "Choose from UNBOUNDED, LRU, and TTL cache strategies. Supports lazy loading, bulk loading, and optional lru-dict C-extension acceleration."
-  - title: "Security & Encryption"
-    details: "Combines strict SQL validation with transparent AES-GCM/ChaCha20/Fernet encryption (v1.3+) to fully protect your data."
-  - title: "Async Support"
-    details: "Delivers maximum performance in asynchronous environments like FastAPI with a custom thread pool."
-  - title: "Intuitive API"
-    details: "Just like a Python dictionary. Persistence without boilerplate code."
-  - title: "V2 Non-blocking Engine"
-    details: "Optional dual-lane write-back architecture with staging buffer, priority queue, and Dead Letter Queue for write-heavy workloads."
-  - title: "Full Documentation"
-    details: "Bilingual (EN/JA) documentation covering cache strategies, encryption, V2 architecture, exceptions, and security audit."
+  - title: "Pydantic Native"
+    details: "Automatically generate tables by registering Pydantic models. Use type hints directly as your schema."
+  - title: "Type-safe Validation"
+    details: "Pydantic's powerful validation runs automatically on inserts and updates, ensuring data integrity."
+  - title: "Django-like Queries"
+    details: "Intuitive keywords like `name__like` or `age__gt` for complex searches without writing SQL."
+  - title: "Fast Full-text Search"
+    details: "Built-in FTS5 support. Enable rapid text search by simply adding the `Searchable` annotation."
+  - title: "Auto Serialization"
+    details: "Transparently store and retrieve complex types like lists, dicts, datetime, and Enums via automatic JSON serialization."
+  - title: "Comprehensive Docs"
+    details: "Bilingual (EN/JA) documentation covering everything from tutorials to best practices."
 ---

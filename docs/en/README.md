@@ -1,6 +1,6 @@
-# NanaSQLite Documentation
+﻿# NyanSQLite Documentation
 
-A dict-like SQLite wrapper with instant persistence and intelligent caching.
+A Pydantic-native SQLite wrapper that allows you to use Pydantic models directly as database schemas, providing type safety and high performance.
 
 ## Table of Contents
 
@@ -15,14 +15,10 @@ A dict-like SQLite wrapper with instant persistence and intelligent caching.
   - [Error Handling](guide/error_handling.md)
   - [Performance](guide/performance.md)
   - [Best Practices](guide/best_practices.md)
-  - [Cache Strategies](guide/cache_strategies.md)
   - [Encryption](guide/encryption.md)
-  - [V2 Architecture](guide/v2_architecture.md)
-  - [Security Audit](guide/security_audit.md)
   - [Exceptions](guide/exceptions.md)
 - [API Reference](#api-reference)
-  - [NanaSQLite (Sync)](api/nanasqlite.md)
-  - [AsyncNanaSQLite (Async)](api/async_nanasqlite.md)
+  - [NyanSQLite](api/NyanSQLite.md)
 
 ---
 
@@ -30,59 +26,34 @@ A dict-like SQLite wrapper with instant persistence and intelligent caching.
 
 ### The Problem
 
-Python dicts are fast and convenient, but they're volatile - when your program ends, all data is lost. Traditional database solutions require learning SQL, managing connections, and handling serialization manually.
+Traditional database solutions require learning SQL, managing connections, and handling serialization manually. Also, you often need to write separate validation logic to ensure data integrity.
 
 ### The Solution
 
-**NanaSQLite** bridges this gap by wrapping a standard Python dict with transparent SQLite persistence:
+**NyanSQLite** bridges this gap by mapping Pydantic models directly to SQLite tables:
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Your Python Code                    │
-│                                                      │
-│    db["user"] = {"name": "Nana", "age": 20}         │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│                   NanaSQLite                         │
-│  ┌───────────────┐     ┌───────────────────────┐    │
-│  │ Memory Cache  │ ←→  │ APSW SQLite Backend   │    │
-│  │ (Python dict) │     │ (Persistent Storage)  │    │
-│  └───────────────┘     └───────────────────────┘    │
-└─────────────────────────────────────────────────────┘
-```
+1. **Type Safe**: Use Pydantic type hints directly as your database schema.
+2. **Auto Serialization**: Transparently handle complex types like dict, list, and datetime.
+3. **Django-like Queries**: Intuitive syntax for complex filtering without writing SQL.
+4. **Fast Search**: Built-in support for SQLite's FTS5 full-text search.
 
 ### Design Principles
 
-1. **Instant Write**: Every write operation is immediately persisted to SQLite
-2. **Smart Read**: Data is loaded on-demand (lazy) or all-at-once (bulk)
-3. **Memory First**: Once loaded, data is served from memory for speed
-4. **Zero Config**: Sensible defaults optimized for performance
-
-### Performance Optimizations
-
-NanaSQLite applies these SQLite optimizations by default:
-
-| Setting | Effect |
-|---------|--------|
-| **WAL Mode** | Write speed: 30ms+ → <1ms |
-| **synchronous=NORMAL** | Safe + Fast |
-| **mmap (256MB)** | Faster reads via memory-mapped I/O |
-| **cache_size (64MB)** | Larger SQLite page cache |
-| **temp_store=MEMORY** | Temp tables in RAM |
+1. **Instant Persistence**: Every write operation is immediately persisted to SQLite.
+2. **Thread Safe**: Protected by `threading.Lock` for safe concurrent access.
+3. **Zero Config**: Sensible defaults optimized for performance (WAL mode, etc.).
 
 ---
 
 ## Installation
 
 ```bash
-pip install nanasqlite
+pip install nyansqlite
 ```
 
 **Requirements:**
 - Python 3.9+
-- APSW (installed automatically)
+- Pydantic 2.0+
 
 ---
 
@@ -91,49 +62,38 @@ pip install nanasqlite
 ### Basic Usage
 
 ```python
-from nanasqlite import NanaSQLite
+from pydantic import BaseModel
+from nyansqlite import NyanSQLite, Indexed, Searchable
 
-# Create or open a database
-db = NanaSQLite("mydata.db")
+# 1. Define your schema
+class Article(BaseModel):
+    id: int                      # 'id' field becomes the primary key automatically
+    author: Indexed[str]         # Indexed column
+    title: Searchable[str]       # Full-text search enabled
+    body: Searchable[str]        # Full-text search enabled
+    views: int = 0
 
-# Store data (instantly persisted)
-db["config"] = {"theme": "dark", "language": "en"}
-db["users"] = ["Alice", "Bob", "Charlie"]
-db["count"] = 42
+# 2. Initialize DB & Register model
+db = NyanSQLite("blog.db")
+db.register(Article)
 
-# Retrieve data
-print(db["config"]["theme"])  # 'dark'
-print(db["users"][0])          # 'Alice'
-print(db["count"])             # 42
+# 3. Insert data
+db.insert(Article(
+    id=1,
+    author="neko",
+    title="Mastering SQLite",
+    body="NyanSQLite makes data management easy."
+))
 
-# Check existence
-if "config" in db:
-    print("Config exists!")
+# 4. Query (Django-like)
+articles = db.query(Article, author="neko", views__gte=0)
 
-# Delete data
-del db["count"]
+# 5. Full-text search
+results = db.search(Article, "SQLite")
+for hit in results:
+    print(f"Found: {hit.title}")
 
-# Close when done
 db.close()
-```
-
-### Context Manager
-
-```python
-with NanaSQLite("mydata.db") as db:
-    db["key"] = "value"
-    # Automatically closed at the end
-```
-
-### Bulk Loading for Speed
-
-```python
-# Load all data into memory at startup
-db = NanaSQLite("mydata.db", bulk_load=True)
-
-# All subsequent reads are from memory (ultra-fast)
-for key in db.keys():
-    print(db[key])  # No database queries!
 ```
 
 ---
@@ -143,17 +103,14 @@ for key in db.keys():
 For more detailed information, please refer to the following guides:
 
 - **[Tutorial](guide/tutorial.md)**: Extended examples including multiple tables and advanced features.
-- **[Validation](guide/validation.md)**: Using validkit-py schemas, coercion, and per-table validators.
-- **[Async Support](guide/async.md)**: How to use `AsyncNanaSQLite` for non-blocking operations.
+- **[Validation](guide/validation.md)**: Schema validation and data handling with Pydantic.
+- **[Async Support](guide/async.md)**: Using NyanSQLite in asynchronous environments.
 - **[Transactions](guide/transactions.md)**: Ensuring data integrity and optimizing bulk writes.
 - **[Error Handling](guide/error_handling.md)**: Handling exceptions and troubleshooting.
-- **[Performance](guide/performance.md)**: Tuning NanaSQLite for maximum speed.
+- **[Performance](guide/performance.md)**: Tuning NyanSQLite for maximum speed.
 - **[Best Practices](guide/best_practices.md)**: Recommended patterns for production use.
-- **[Cache Strategies](guide/cache_strategies.md)**: Choosing the right cache strategy (UNBOUNDED, LRU, TTL).
-- **[Encryption](guide/encryption.md)**: Transparent encryption with AES-GCM, ChaCha20-Poly1305, and Fernet.
-- **[V2 Architecture](guide/v2_architecture.md)**: Non-blocking write-back architecture for write-heavy workloads.
-- **[Security Audit](guide/security_audit.md)**: Security audit findings and recommendations.
-- **[Exceptions](guide/exceptions.md)**: Complete exception class reference and hierarchy.
+- **[Encryption](guide/encryption.md)**: Securing your data at rest.
+- **[Exceptions](guide/exceptions.md)**: Complete exception class reference.
 
 ---
 
@@ -161,5 +118,4 @@ For more detailed information, please refer to the following guides:
 
 Complete documentation for all classes and methods.
 
-- **[NanaSQLite (Sync)](api/nanasqlite.md)**
-- **[AsyncNanaSQLite (Async)](api/async_nanasqlite.md)**
+- **[NyanSQLite](api/NyanSQLite.md)**

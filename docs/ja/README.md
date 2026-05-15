@@ -1,6 +1,6 @@
-# NanaSQLite ドキュメント
+﻿# NyanSQLite ドキュメント
 
-dict風インターフェースでSQLite永続化を実現するライブラリ。
+Pydanticモデルをそのままデータベーススキーマとして利用できる、型安全で高性能なSQLiteラッパー。
 
 ## 目次
 
@@ -15,14 +15,10 @@ dict風インターフェースでSQLite永続化を実現するライブラリ�
   - [エラーハンドリング](guide/error_handling.md)
   - [パフォーマンス](guide/performance.md)
   - [ベストプラクティス](guide/best_practices.md)
-  - [キャッシュ戦略](guide/cache_strategies.md)
   - [暗号化](guide/encryption.md)
-  - [V2 アーキテクチャ](guide/v2_architecture.md)
-  - [セキュリティ監査レポート](guide/security_audit.md)
   - [例外クラス](guide/exceptions.md)
 - [APIリファレンス](#apiリファレンス)
-  - [NanaSQLite (Sync)](api/nanasqlite.md)
-  - [AsyncNanaSQLite (Async)](api/async_nanasqlite.md)
+  - [NyanSQLite](api/NyanSQLite.md)
 
 ---
 
@@ -30,59 +26,34 @@ dict風インターフェースでSQLite永続化を実現するライブラリ�
 
 ### 課題
 
-Pythonのdictは高速で便利ですが、揮発性です。プログラムが終了すると全てのデータが失われます。従来のデータベースソリューションはSQLの学習、接続管理、シリアライズの手動処理が必要です。
+従来のデータベースソリューションはSQLの学習、接続管理、シリアライズの手動処理が必要です。また、データの整合性を保つためのバリデーションコードを別途記述する必要があります。
 
 ### 解決策
 
-**NanaSQLite**は標準のPython dictを透過的なSQLite永続化でラップし、このギャップを埋めます：
+**NyanSQLite**はPydanticモデルをSQLiteのテーブルに直接マッピングし、このギャップを埋めます：
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Pythonコード                        │
-│                                                      │
-│    db["user"] = {"name": "Nana", "age": 20}         │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│                   NanaSQLite                         │
-│  ┌───────────────┐     ┌───────────────────────┐    │
-│  │ メモリキャッシュ │ ←→  │ APSW SQLite バックエンド │    │
-│  │ (Python dict) │     │ (永続ストレージ)         │    │
-│  └───────────────┘     └───────────────────────┘    │
-└─────────────────────────────────────────────────────┘
-```
+1. **型安全**: Pydanticの型ヒントをそのままデータベーススキーマとして利用。
+2. **自動シリアライズ**: dictやlist、datetimeなどの複雑な型を自動的にシリアライズ/デシリアライズ。
+3. **Djangoライクなクエリ**: 直感的な構文で複雑な検索を実現。
+4. **高速な全文検索**: SQLiteのFTS5をサポート。
 
 ### 設計原則
 
-1. **即時書き込み**: すべての書き込み操作は即座にSQLiteに永続化
-2. **スマートリード**: データはオンデマンド（遅延）または一括でロード
-3. **メモリ優先**: 一度ロードしたデータはメモリから高速に提供
-4. **設定不要**: パフォーマンス最適化された合理的なデフォルト
-
-### パフォーマンス最適化
-
-NanaSQLiteはデフォルトで以下のSQLite最適化を適用します：
-
-| 設定 | 効果 |
-|------|------|
-| **WALモード** | 書き込み速度: 30ms+ → 1ms以下 |
-| **synchronous=NORMAL** | 安全 + 高速 |
-| **mmap (256MB)** | メモリマップドI/Oで読み込み高速化 |
-| **cache_size (64MB)** | SQLiteページキャッシュ拡大 |
-| **temp_store=MEMORY** | 一時テーブルをRAMに |
+1. **即時永続化**: すべての書き込み操作は即座にSQLiteに保存。
+2. **スレッドセーフ**: `threading.Lock`による安全なマルチスレッドアクセス。
+3. **設定不要**: パフォーマンス最適化された合理的なデフォルト（WALモード等）。
 
 ---
 
 ## インストール
 
 ```bash
-pip install nanasqlite
+pip install nyansqlite
 ```
 
 **必要条件:**
 - Python 3.9以上
-- APSW（自動でインストール）
+- Pydantic 2.0以上
 
 ---
 
@@ -91,49 +62,38 @@ pip install nanasqlite
 ### 基本的な使い方
 
 ```python
-from nanasqlite import NanaSQLite
+from pydantic import BaseModel
+from nyansqlite import NyanSQLite, Indexed, Searchable
 
-# データベースを作成または開く
-db = NanaSQLite("mydata.db")
+# 1. スキーマ定義
+class Article(BaseModel):
+    id: int                      # idフィールドが自動的に主キーになります
+    author: Indexed[str]         # インデックス付きカラム
+    title: Searchable[str]       # 全文検索対象
+    body: Searchable[str]        # 全文検索対象
+    views: int = 0
 
-# データを保存（即座に永続化）
-db["config"] = {"theme": "dark", "language": "ja"}
-db["users"] = ["Alice", "Bob", "Charlie"]
-db["count"] = 42
+# 2. DB初期化＆テーブル作成
+db = NyanSQLite("blog.db")
+db.register(Article)
 
-# データを取得
-print(db["config"]["theme"])  # 'dark'
-print(db["users"][0])          # 'Alice'
-print(db["count"])             # 42
+# 3. データ挿入
+db.insert(Article(
+    id=1,
+    author="neko",
+    title="SQLiteを使いこなそう",
+    body="NyanSQLiteで簡単にデータ管理ができます。"
+))
 
-# 存在確認
-if "config" in db:
-    print("設定が存在します！")
+# 4. クエリ実行
+articles = db.query(Article, author="neko", views__gte=0)
 
-# データを削除
-del db["count"]
+# 5. 全文検索
+results = db.search(Article, "SQLite")
+for hit in results:
+    print(f"Found: {hit.title}")
 
-# 終了時にクローズ
 db.close()
-```
-
-### コンテキストマネージャ
-
-```python
-with NanaSQLite("mydata.db") as db:
-    db["key"] = "value"
-    # 終了時に自動的にクローズ
-```
-
-### 一括ロードで高速化
-
-```python
-# 起動時に全データをメモリにロード
-db = NanaSQLite("mydata.db", bulk_load=True)
-
-# 以降の読み込みはすべてメモリから（超高速）
-for key in db.keys():
-    print(db[key])  # データベースクエリなし！
 ```
 
 ---
@@ -143,17 +103,14 @@ for key in db.keys():
 詳細な情報は以下のガイドを参照してください：
 
 - **[チュートリアル](guide/tutorial.md)**: 複数テーブルや高度な機能を含む詳細な例。
-- **[バリデーション](guide/validation.md)**: validkit-py のスキーマ検証、coerce、自動継承の使い方。
-- **[非同期サポート](guide/async.md)**: `AsyncNanaSQLite` の使用方法。
+- **[バリデーション](guide/validation.md)**: Pydanticによるスキーマ検証とデータ型の扱い。
+- **[非同期サポート](guide/async.md)**: 非同期環境での使用方法。
 - **[トランザクション](guide/transactions.md)**: データの整合性と一括書き込みの最適化。
 - **[エラーハンドリング](guide/error_handling.md)**: 例外処理とトラブルシューティング。
-- **[パフォーマンス](guide/performance.md)**: NanaSQLiteの速度チューニング。
+- **[パフォーマンス](guide/performance.md)**: NyanSQLiteの速度チューニング。
 - **[ベストプラクティス](guide/best_practices.md)**: 本番環境での推奨パターン。
-- **[キャッシュ戦略](guide/cache_strategies.md)**: キャッシュ戦略の選択（UNBOUNDED、LRU、TTL）。
-- **[暗号化](guide/encryption.md)**: AES-GCM、ChaCha20-Poly1305、Fernetによる透過暗号化。
-- **[V2 アーキテクチャ](guide/v2_architecture.md)**: 書き込み負荷の高いワークロード向け非ブロッキング書き込みアーキテクチャ。
-- **[セキュリティ監査レポート](guide/security_audit.md)**: 脆弱性の確認結果、PoC、速度改善余地、推奨対応のまとめ。
-- **[例外クラス](guide/exceptions.md)**: 例外クラスの詳細リファレンスと階層構造。
+- **[暗号化](guide/encryption.md)**: データの安全な保存。
+- **[例外クラス](guide/exceptions.md)**: 例外クラスの詳細リファレンス。
 
 ---
 
@@ -161,5 +118,4 @@ for key in db.keys():
 
 全クラス・メソッドの完全なドキュメント。
 
-- **[NanaSQLite (Sync)](api/nanasqlite.md)**
-- **[AsyncNanaSQLite (Async)](api/async_nanasqlite.md)**
+- **[NyanSQLite](api/NyanSQLite.md)**

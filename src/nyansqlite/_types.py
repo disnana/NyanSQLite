@@ -29,16 +29,53 @@ def is_searchable(annotation: Any) -> bool:
     return False
 
 
-def unwrap_annotated(annotation: Any) -> Any:
-    """Strip the ``Annotated[T, ...]`` wrapper and return ``T``."""
+def unwrap_annotated(annotation: Any, _depth: int = 0, _max_depth: int = 10) -> Any:
+    """Strip the ``Annotated[T, ...]`` wrapper and return ``T``.
+
+    Args:
+        annotation: Type annotation to unwrap
+        _depth: Internal recursion depth counter
+        _max_depth: Maximum recursion depth (default 10)
+
+    Returns:
+        Unwrapped base type
+
+    Raises:
+        RecursionError: If nesting exceeds max_depth (guards against pathological types)
+    """
+    if _depth > _max_depth:
+        raise RecursionError(
+            f"Type annotation nesting exceeds maximum depth of {_max_depth}. "
+            f"This may indicate a malformed or recursive type definition. "
+            f"Annotation: {annotation!r}"
+        )
     if get_origin(annotation) is Annotated:
-        return get_args(annotation)[0]
+        return unwrap_annotated(get_args(annotation)[0], _depth + 1, _max_depth)
     return annotation
 
 
-def resolve_type(annotation: Any) -> tuple[Any, bool]:
-    """Return ``(base_type, is_optional)`` after stripping Annotated and Optional."""
-    inner = unwrap_annotated(annotation)
+def resolve_type(annotation: Any, _depth: int = 0, _max_depth: int = 10) -> tuple[Any, bool]:
+    """Return ``(base_type, is_optional)`` after stripping Annotated and Optional.
+
+    Args:
+        annotation: Type annotation to resolve
+        _depth: Internal recursion depth counter
+        _max_depth: Maximum recursion depth (default 10)
+
+    Returns:
+        Tuple of (resolved_type, is_optional)
+
+    Raises:
+        RecursionError: If nesting exceeds max_depth
+    """
+    if _depth > _max_depth:
+        raise RecursionError(
+            f"Type annotation nesting exceeds maximum depth of {_max_depth}. "
+            f"This may indicate a malformed or recursive type definition. "
+            f"Annotation: {annotation!r}"
+        )
+
+    inner = unwrap_annotated(annotation, _depth=_depth, _max_depth=_max_depth)
 
     origin = get_origin(inner)
 
@@ -100,11 +137,20 @@ def serialize_value(value: Any, annotation: Any) -> Any:
     return value
 
 
-def deserialize_value(value: Any, annotation: Any) -> Any:
+def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
     """Convert a SQLite scalar back to the correct Python type.
 
-    Includes safe fallback for corrupted or malformed data to prevent
-    deserialization errors from crashing the application.
+    Args:
+        value: SQLite scalar value
+        annotation: Target type annotation
+        strict: If True, raise ValueError on malformed data.
+               If False, emit warning and return raw/None value (default).
+
+    Returns:
+        Deserialized Python value
+
+    Raises:
+        ValueError: If strict=True and deserialization fails
     """
     if value is None:
         return None
@@ -118,7 +164,11 @@ def deserialize_value(value: Any, annotation: Any) -> Any:
             try:
                 return json.loads(value)
             except (json.JSONDecodeError, ValueError) as e:
-                # Log and return the raw value if JSON is malformed
+                if strict:
+                    raise ValueError(
+                        f"Malformed JSON data: {value!r}. Cannot deserialize as {base}. "
+                        f"Error: {e}"
+                    ) from e
                 import warnings
                 warnings.warn(
                     f"Malformed JSON data: {value!r}. Returning as raw string. "
@@ -132,7 +182,11 @@ def deserialize_value(value: Any, annotation: Any) -> Any:
         try:
             return datetime.fromisoformat(value)
         except (ValueError, TypeError, AttributeError) as e:
-            # Fallback: return raw value and warn
+            if strict:
+                raise ValueError(
+                    f"Invalid datetime format: {value!r}. Expected ISO8601 format (YYYY-MM-DDTHH:MM:SS). "
+                    f"Error: {e}"
+                ) from e
             import warnings
             warnings.warn(
                 f"Invalid datetime format: {value!r}. Expected ISO8601 format. "
@@ -145,7 +199,11 @@ def deserialize_value(value: Any, annotation: Any) -> Any:
         try:
             return date.fromisoformat(value)
         except (ValueError, TypeError, AttributeError) as e:
-            # Fallback: return raw value and warn
+            if strict:
+                raise ValueError(
+                    f"Invalid date format: {value!r}. Expected ISO8601 format (YYYY-MM-DD). "
+                    f"Error: {e}"
+                ) from e
             import warnings
             warnings.warn(
                 f"Invalid date format: {value!r}. Expected ISO8601 format (YYYY-MM-DD). "

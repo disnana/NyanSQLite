@@ -1,14 +1,14 @@
-# AsyncNanaSQLite API リファレンス
+﻿# AsyncNyanSQLite API リファレンス
 
-非同期版 `AsyncNanaSQLite` クラスの完全なドキュメントです。
+非同期版 `AsyncNyanSQLite` クラスの完全なドキュメントです。
 
-## クラス: `AsyncNanaSQLite`
+## クラス: `AsyncNyanSQLite`
 
 ```python
-class AsyncNanaSQLite
+class AsyncNyanSQLite
 ```
 
-`NanaSQLite` の非ブロッキング非同期ラッパーです。
+`NyanSQLite` の非ブロッキング非同期ラッパーです。
 すべてのデータベース操作をスレッドプールエグゼキュータに委譲し、メインの `asyncio` イベントループが決してブロックされないようにします。これはFastAPIやdiscord.pyボットのような高並行性アプリケーションに不可欠です。
 
 ---
@@ -26,7 +26,7 @@ def __init__(
     optimize: bool = True,
     cache_size_mb: int = 64,
     max_workers: int = 5,
-    thread_name_prefix: str = "AsyncNanaSQLite",
+    thread_name_prefix: str = "AsyncNyanSQLite",
     strict_sql_validation: bool = True,
     allowed_sql_functions: list[str] | None = None,
     forbidden_sql_functions: list[str] | None = None,
@@ -37,7 +37,7 @@ def __init__(
 )
 ```
 
-AsyncNanaSQLiteインターフェースを初期化します。
+AsyncNyanSQLiteインターフェースを初期化します。
 
 **パラメータ:**
 
@@ -47,8 +47,8 @@ AsyncNanaSQLiteインターフェースを初期化します。
   - 読み取り負荷が高い並行処理の場合、この値を増やします。
 - `read_pool_size` (int, 任意): 専用の読み取り専用接続プールのサイズ。デフォルトは `0`（無効）。
   - これを有効にする（例: `read_pool_size=4`）と、書き込みロックをバイパスして並列読み取りが可能になります。
-- `strict_sql_validation` など: `NanaSQLite` と同じセキュリティパラメータ。
-- `validator` (dict | Schema | None, 任意): validkit-py のバリデーションスキーマ。`NanaSQLite` の `validator` と同じ動作をします。書き込み時にスキーマ検証を行い、違反時は `NanaSQLiteValidationError` を送出します。使用には `pip install nanasqlite[validation]` が必要です。(v1.3.4b2以降)
+- `strict_sql_validation` など: `NyanSQLite` と同じセキュリティパラメータ。
+- `validator` (dict | Schema | None, 任意): validkit-py のバリデーションスキーマ。`NyanSQLite` の `validator` と同じ動作をします。書き込み時にスキーマ検証を行い、違反時は `NyanSQLiteValidationError` を送出します。使用には `pip install NyanSQLite[validation]` が必要です。(v1.3.4b2以降)
 - `coerce` (bool, 任意): `True` の場合、validkit-py の変換済みの値をDBに保存します。**注意**: スキーマの各フィールドバリデーターに `.coerce()` が必要です（例: `v.int().coerce()`）。`validator` が設定されている場合のみ有効。デフォルトは `False`。(v1.3.4b2以降)
 
 ---
@@ -68,10 +68,10 @@ async def close(self) -> None
 ```python
 async def table(self, table_name: str,
                 validator: Any | None = ...,
-                coerce: bool = ...) -> AsyncNanaSQLite
+                coerce: bool = ...) -> AsyncNyanSQLite
 ```
 
-サブテーブル用の新しい `AsyncNanaSQLite` インスタンスを非同期に作成します。
+サブテーブル用の新しい `AsyncNyanSQLite` インスタンスを非同期に作成します。
 スレッドプールと接続は親と共有されます。
 
 **パラメータ:**
@@ -260,7 +260,7 @@ async with db.transaction():
 
 ## クエリ & SQL
 
-`NanaSQLite` で利用可能なすべてのSQLおよびクエリメソッドは、ここで `async` メソッドとして利用可能です。
+`NyanSQLite` で利用可能なすべてのSQLおよびクエリメソッドは、ここで `async` メソッドとして利用可能です。
 
 ### `query` (エイリアス: `aquery`)
 ```python
@@ -421,7 +421,7 @@ async def get_model(self, key: str, model_class: type = None) -> Any
 
 ```python
 @property
-def sync_db(self) -> NanaSQLite | None
+def sync_db(self) -> NyanSQLite | None
 ```
-内部の同期 `NanaSQLite` インスタンスへのアクセス。
+内部の同期 `NyanSQLite` インスタンスへのアクセス。
 **警告**: 非同期関数から `sync_db` のメソッドを呼び出すと、イベントループがブロックされます。注意して使用してください。

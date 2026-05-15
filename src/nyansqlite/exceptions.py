@@ -21,4 +21,12 @@ class TableNameCollisionError(NyanSQLiteError):
     例: UserAuth と User_Auth は両方とも user_auth になる"""
     pass
 
+class QueryValidationError(NyanSQLiteError):
+    """クエリパラメータの型変換に失敗した場合にスローされます.
+
+    通常、クライアント側での不正な入力パラメータ（例: age__gt='not_a_number'）が原因です。
+    アプリケーションは これを400 Bad Request として処理すべきです。"""
+    pass
+
+
 
