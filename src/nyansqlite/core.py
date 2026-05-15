@@ -190,10 +190,16 @@ class _Meta:
 # ── main class ────────────────────────────────────────────────────────── #
 
 class NyanSQLite:
-    """Pydantic-native SQLite wrapper.
+    """PydanticネイティブなSQLiteラッパー。
 
-    Automatic schema creation, B-tree indexes, FTS5 full-text search,
-    partial reads/writes, and query operators — powered by apsw.
+    自動的なスキーマ作成、B-treeインデックス、FTS5全文検索、
+    部分的な読み書き、および高度なクエリ演算子をサポートします。
+    バックエンドには高速な `apsw` を使用しています。
+
+    Pydantic-native SQLite wrapper.
+    Supports automatic schema creation, B-tree indexes, FTS5 full-text search,
+    partial reads/writes, and advanced query operators.
+    Powered by the high-performance `apsw` backend.
 
     Quick start::
 
@@ -217,14 +223,20 @@ class NyanSQLite:
     """
 
     def __init__(self, path: str = ":memory:", wal: bool = True, strict_deserialization: bool = False):
-        """Initialize NyanSQLite.
+        """NyanSQLiteを初期化します。
+        Initialize NyanSQLite.
 
         Args:
-            path: Database file path (default: in-memory)
-            wal: Enable WAL mode (default: True)
-            strict_deserialization: If True, raise ValueError on malformed data.
-                                   If False, emit warning and return raw value.
-                                   Default: False (lenient mode)
+            path (str): データベースファイルのパス。デフォルトはメモリ内データベース (":memory:")。
+                        Database file path. Defaults to in-memory (":memory:").
+            wal (bool): WAL (Write-Ahead Logging) モードを有効にするかどうか。デフォルトは True。
+                        Whether to enable WAL (Write-Ahead Logging) mode. Defaults to True.
+            strict_deserialization (bool): デシリアライズ時に厳密なチェックを行うかどうか。
+                                         Trueの場合、不正なデータに対して ValueError を発生させます。
+                                         Falseの場合、警告を出して生の値を返します。
+                                         Whether to perform strict checks during deserialization.
+                                         If True, raises ValueError on malformed data.
+                                         If False, emits a warning and returns the raw value.
         """
         self._conn     = NyanConnection(path, wal=wal)
         self._registry: dict[type[BaseModel], _Meta] = {}
@@ -234,9 +246,16 @@ class NyanSQLite:
     # ── registration ─────────────────────────────────────────────────── #
 
     def register(self, model: type[BaseModel]) -> None:
-        """Introspect *model* and create table + indexes + FTS5 virtual table.
+        """Pydanticモデルを登録し、対応するテーブル、インデックス、FTS5仮想テーブルを作成します。
+        Register a Pydantic model and create the corresponding table, indexes, and FTS5 virtual table.
 
-        Raises TableNameCollisionError if a different model is already registered with the same table name.
+        Args:
+            model (type[BaseModel]): 登録するPydanticモデルクラス。
+                                    The Pydantic model class to register.
+
+        Raises:
+            TableNameCollisionError: 同じテーブル名を持つ別のモデルが既に登録されている場合に発生します。
+                                     Raised if another model with the same table name is already registered.
         """
         table  = model_to_table_name(model)
         pk     = get_primary_key(model)
@@ -317,7 +336,21 @@ class NyanSQLite:
     # ── INSERT ───────────────────────────────────────────────────────── #
 
     def insert(self, obj: M) -> M:
-        """Validate via Pydantic then INSERT. Returns the object unchanged."""
+        """Pydanticモデルのインスタンスをデータベースに挿入します。
+        Validate via Pydantic then INSERT. Returns the object unchanged.
+
+        Args:
+            obj (M): 挿入するモデルのインスタンス。
+                    The model instance to insert.
+
+        Returns:
+            M: 挿入されたオブジェクト（変更なし）。
+               The inserted object (unchanged).
+
+        Raises:
+            ModelNotRegisteredError: モデルが登録されていない場合に発生します。
+                                     Raised if the model is not registered.
+        """
         meta = self._meta(type(obj))
         row  = self._to_row(obj, meta)
         cols = ", ".join(f'"{k}"' for k in row)
@@ -329,16 +362,24 @@ class NyanSQLite:
         return obj
 
     def insert_many(self, objs: list[M]) -> int:
-        """Bulk-insert in a single transaction. Returns the number inserted.
+        """複数のモデルインスタンスを1つのトランザクションで一括挿入します。
+        Bulk-insert multiple model instances in a single transaction.
 
+        SQLiteの変数バインド制限（デフォルト 32766）を考慮し、大きなデータセットは自動的に分割して挿入されます。
         Automatically chunks large inserts to respect SQLite's variable binding limit
         (default 32766). This prevents SQLITE_TOOBIG errors on very large datasets.
 
         Args:
-            objs: List of model instances to insert
+            objs (list[M]): 挿入するモデルインスタンスのリスト。
+                           List of model instances to insert.
 
         Returns:
-            Total number of rows inserted
+            int: 挿入された行数。
+                 Total number of rows inserted.
+
+        Raises:
+            ModelNotRegisteredError: モデルが登録されていない場合に発生します。
+                                     Raised if the model is not registered.
         """
         if not objs:
             return 0
@@ -372,18 +413,29 @@ class NyanSQLite:
     # ── UPDATE ───────────────────────────────────────────────────────── #
 
     def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> int:
-        """Partial update — only the specified *fields* are written.
+        """指定されたフィールドのみを更新する部分更新を行います。
+        Partial update — only the specified *fields* are written.
 
         Args:
-            where:    Exact-match conditions that identify the row(s).
-            **fields: ``field=new_value`` pairs to update.
+            model (type[BaseModel]): 更新対象のモデルクラス。
+                                    The model class to update.
+            where (dict[str, Any]): 更新対象の行を特定する一致条件（例: `{"id": 1}`）。
+                                   Exact-match conditions that identify the row(s).
+            **fields (Any): 更新する `フィールド名=新しい値` のペア。
+                           `field=new_value` pairs to update.
 
         Returns:
-            Number of rows updated.
+            int: 更新された行数。
+                 Number of rows updated.
 
-        Example::
+        Raises:
+            ModelNotRegisteredError: モデルが登録されていない場合に発生します。
+                                     Raised if the model is not registered.
+            FieldNotFoundError: 指定されたフィールドがモデルに存在しない場合に発生します。
+                                Raised if any specified field is not found in the model.
 
-            db.update(User, where={"id": 1}, age=26, bio="updated")
+        Example:
+            >>> db.update(User, where={"id": 1}, age=26, bio="updated")
         """
         if not fields:
             return 0
@@ -407,13 +459,25 @@ class NyanSQLite:
     # ── DELETE ───────────────────────────────────────────────────────── #
 
     def delete(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> int:
-        """Delete all rows matching *filters* and *kwargs*. Returns rows deleted.
+        """フィルタ条件に一致するすべての行を削除します。
+        Delete all rows matching *filters* and *kwargs*.
 
-        Example::
+        Args:
+            model (type[BaseModel]): 削除対象のモデルクラス。
+                                    The model class to delete from.
+            *filters (str): 文字列形式のフィルタ条件（例: `"age > 50"`）。
+                           String filters (e.g., "age > 50").
+            **kwargs (Any): キーワード形式のフィルタ条件（例: `id=42`）。
+                           Keyword filters (e.g., id=42).
 
-            db.delete(User, id=42)
-            db.delete(User, "age > 50")
-            db.delete(Session, user_id=1, active=True)
+        Returns:
+            int: 削除された行数。
+                 Number of rows deleted.
+
+        Example:
+            >>> db.delete(User, id=42)
+            >>> db.delete(User, "age > 50")
+            >>> db.delete(Session, user_id=1, active=True)
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs)
@@ -426,13 +490,25 @@ class NyanSQLite:
     # ── GET / QUERY ───────────────────────────────────────────────────── #
 
     def get(self, model: type[M], *filters: str, **kwargs: Any) -> Optional[M]:
-        """Fetch the first matching row as a Pydantic model, or ``None``.
+        """条件に一致する最初の行をPydanticモデルとして取得します。一致しない場合は `None` を返します。
+        Fetch the first matching row as a Pydantic model, or ``None``.
 
-        Example::
+        Args:
+            model (type[M]): 取得対象のモデルクラス。
+                            The Pydantic model class.
+            *filters (str): 文字列形式のフィルタ条件。
+                           String filters.
+            **kwargs (Any): キーワード形式のフィルタ条件。
+                           Keyword filters.
 
-            user = db.get(User, id=1)
-            user = db.get(User, "age > 30", name="Alice")
-            user = db.get(User, email="taro@example.com")
+        Returns:
+            Optional[M]: 取得されたモデルインスタンス、または None。
+                         The retrieved model instance, or None.
+
+        Example:
+            >>> user = db.get(User, id=1)
+            >>> user = db.get(User, "age > 30", name="Alice")
+            >>> user = db.get(User, email="taro@example.com")
         """
         results = self.query(model, *filters, limit=1, **kwargs)
         return results[0] if results else None
@@ -447,18 +523,39 @@ class NyanSQLite:
         desc:     bool = False,
         **kwargs: Any,
     ) -> list[M]:
-        """Query rows with optional filtering, ordering, and pagination.
+        """フィルタリング、ソート、ページネーションを使用して行を検索します。
+        Query rows with optional filtering, ordering, and pagination.
 
+        文字列フィルタおよび演算子サフィックス（`__gt`, `__like` など）をサポートしています。
         Supports string filters and operator suffixes (``__gt``, ``__like``, …).
 
-        Examples::
+        Args:
+            model (type[M]): 検索対象のモデルクラス。
+                            The Pydantic model class.
+            *filters (str): 文字列形式のフィルタ条件。
+                           String filters.
+            limit (Optional[int]): 取得する最大行数。
+                                  Maximum number of rows to return.
+            offset (Optional[int]): 取得を開始するオフセット行数。
+                                   Number of rows to skip.
+            order_by (Optional[str]): ソートに使用するフィールド名。
+                                     Field name to order by.
+            desc (bool): 降順でソートするかどうか。デフォルトは False（昇順）。
+                        Whether to order in descending order. Defaults to False (ascending).
+            **kwargs (Any): キーワード形式のフィルタ条件。
+                           Keyword filters.
 
-            db.query(User)                                  # all rows
-            db.query(User, age=25)                          # exact match
-            db.query(User, "age > 20", limit=10)            # string filters
-            db.query(User, age__gte=20, limit=10)           # operator suffixes
-            db.query(User, order_by="name", desc=True)      # ordering
-            db.query(User, order_by="id", limit=20, offset=40)  # pagination
+        Returns:
+            list[M]: 取得されたモデルインスタンスのリスト。
+                     List of matching model instances.
+
+        Example:
+            >>> db.query(User)                                  # all rows
+            >>> db.query(User, age=25)                          # exact match
+            >>> db.query(User, "age > 20", limit=10)            # string filters
+            >>> db.query(User, age__gte=20, limit=10)           # operator suffixes
+            >>> db.query(User, order_by="name", desc=True)      # ordering
+            >>> db.query(User, order_by="id", limit=20, offset=40)  # pagination
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs)
@@ -488,14 +585,37 @@ class NyanSQLite:
         desc:     bool = False,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Partial read — fetch only *fields*, returned as plain dicts.
+        """特定のフィールドのみを辞書のリストとして取得します（部分読み込み）。
+        Partial read — fetch only *fields*, returned as plain dicts.
 
+        大きな行を持つテーブルで、未使用の列をロードするのを避けることができます。
         Avoids loading unused columns for large rows.
 
-        Example::
+        Args:
+            model (type[BaseModel]): 取得対象のモデルクラス。
+                                    The model class.
+            fields (list[str]): 取得するフィールド名のリスト。
+                               List of field names to fetch.
+            *filters (str): 文字列形式のフィルタ条件。
+                           String filters.
+            limit (Optional[int]): 取得する最大行数。
+                                  Maximum number of rows.
+            offset (Optional[int]): オフセット。
+                                   Offset.
+            order_by (Optional[str]): ソートに使用するフィールド名。
+                                     Field name to order by.
+            desc (bool): 降順にするかどうか。
+                        Descending order.
+            **kwargs (Any): キーワード形式のフィルタ条件。
+                           Keyword filters.
 
-            db.select(Article, ["title", "views"], author="neko", order_by="views", desc=True)
-            db.select(Article, ["title"], "views > 100")
+        Returns:
+            list[dict[str, Any]]: 指定されたフィールドを含む辞書のリスト。
+                                 List of dicts containing specified fields.
+
+        Example:
+            >>> db.select(Article, ["title", "views"], author="neko", order_by="views", desc=True)
+            >>> db.select(Article, ["title"], "views > 100")
         """
         meta = self._meta(model)
         meta.check_fields(fields, model.__name__)
@@ -525,18 +645,35 @@ class NyanSQLite:
         *,
         limit:  Optional[int] = None,
     ) -> list[M]:
-        """Full-text search on all ``Searchable[str]`` fields.
+        """すべての `Searchable[str]` フィールドに対して全文検索を実行します。
+        Full-text search on all ``Searchable[str]`` fields.
 
+        FTS5の `MATCH` を使用し、BM25アルゴリズムでランク付け（`ORDER BY rank`）されます。
         Uses FTS5 ``MATCH`` with BM25 ranking (``ORDER BY rank``).
 
-        Example::
+        Args:
+            model (type[M]): 検索対象のモデルクラス。
+                            The Pydantic model class.
+            query (str): 検索クエリ文字列。
+                        FTS5 query string.
+            limit (Optional[int]): 取得する最大行数。
+                                  Maximum number of rows.
 
-            db.search(Article, "python sqlite")
-            db.search(Article, "python sqlite", limit=5)
+        Returns:
+            list[M]: 検索結果に一致するモデルインスタンスのリスト（ランク順）。
+                     List of matching model instances, ordered by relevance.
 
-        For field-scoped search, use FTS5 column filter syntax::
+        Raises:
+            SearchNotEnabledError: モデルに `Searchable[str]` フィールドが定義されていない場合に発生します。
+                                   Raised if the model has no Searchable[str] fields.
 
-            db.search(Article, "title:python")
+        Example:
+            >>> db.search(Article, "python sqlite")
+            >>> db.search(Article, "python sqlite", limit=5)
+
+        フィールドを限定した検索には FTS5 のカラム指定構文が使用できます:
+        For field-scoped search, use FTS5 column filter syntax:
+            >>> db.search(Article, "title:python")
         """
         meta = self._meta(model)
         if not meta.fts_table:
@@ -561,13 +698,25 @@ class NyanSQLite:
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
     def count(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> int:
-        """Return the number of rows matching *filters* and *kwargs*.
+        """フィルタ条件に一致する行数を返します。
+        Return the number of rows matching *filters* and *kwargs*.
 
-        Example::
+        Args:
+            model (type[BaseModel]): カウント対象のモデルクラス。
+                                    The model class.
+            *filters (str): 文字列フィルタ。
+                           String filters.
+            **kwargs (Any): キーワードフィルタ。
+                           Keyword filters.
 
-            total  = db.count(User)
-            adults = db.count(User, "age >= 18")
-            adults = db.count(User, age__gte=18)
+        Returns:
+            int: 条件に一致した行数。
+                 Number of matching rows.
+
+        Example:
+            >>> total  = db.count(User)
+            >>> adults = db.count(User, "age >= 18")
+            >>> adults = db.count(User, age__gte=18)
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs)
@@ -577,14 +726,24 @@ class NyanSQLite:
             return rows[0]["n"] if rows else 0
 
     def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
-        """Return ``True`` if at least one row matches *filters* and *kwargs*.
+        """フィルタ条件に一致する行が少なくとも1つ存在するかどうかを返します。
+        Return ``True`` if at least one row matches *filters* and *kwargs*.
 
-        Example::
+        Args:
+            model (type[BaseModel]): 確認対象のモデルクラス。
+                                    The model class.
+            *filters (str): 文字列フィルタ。
+                           String filters.
+            **kwargs (Any): キーワードフィルタ。
+                           Keyword filters.
 
-            if db.exists(User, email="taro@example.com"):
-                ...
-            if db.exists(User, "age > 20"):
-                ...
+        Returns:
+            bool: 存在する場合は True、そうでない場合は False。
+                  True if matching rows exist, False otherwise.
+
+        Example:
+            >>> if db.exists(User, email="taro@example.com"):
+            >>>     ...
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs)
@@ -595,7 +754,13 @@ class NyanSQLite:
     # ── MAINTENANCE ───────────────────────────────────────────────────── #
 
     def rebuild_fts(self, model: type[BaseModel]) -> None:
-        """Rebuild the FTS5 index for *model* (useful after bulk imports)."""
+        """モデルの FTS5 インデックスを再構築します。大量のデータインポート後などに有用です。
+        Rebuild the FTS5 index for *model* (useful after bulk imports).
+
+        Args:
+            model (type[BaseModel]): インデックスを再構築するモデルクラス。
+                                    The model class to rebuild index for.
+        """
         meta = self._meta(model)
         if not meta.fts_table:
             return
@@ -605,17 +770,29 @@ class NyanSQLite:
             )
 
     def vacuum(self) -> None:
-        """VACUUM the database to reclaim disk space."""
+        """データベースを VACUUM してディスク領域を解放します。
+        VACUUM the database to reclaim disk space.
+        """
         self._conn.execute("VACUUM")
 
     # ── RAW SQL ───────────────────────────────────────────────────────── #
 
     def execute_raw(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
-        """Execute arbitrary SQL and return rows as dicts.
+        """任意のSQLを実行し、結果を辞書のリストとして返します。
+        Execute arbitrary SQL and return rows as dicts.
 
-        Example::
+        Args:
+            sql (str): 実行するSQL文。
+                      SQL statement to execute.
+            params (tuple): SQL文に渡すパラメータ。
+                           Parameters for the SQL statement.
 
-            db.execute_raw("SELECT count(*) AS n FROM user WHERE age > ?", (18,))
+        Returns:
+            list[dict[str, Any]]: 結果行のリスト（各行は辞書）。
+                                 List of result rows as dicts.
+
+        Example:
+            >>> db.execute_raw("SELECT count(*) AS n FROM user WHERE age > ?", (18,))
         """
         return self._conn.execute(sql, params)
 
@@ -628,14 +805,24 @@ class NyanSQLite:
         self.close()
 
     def close(self) -> None:
-        """Close the underlying database connection."""
+        """データベース接続を閉じます。
+        Close the underlying database connection.
+        """
         self._conn.close()
 
     @property
     def backend(self) -> str:
-        """``'apsw'`` or ``'sqlite3'`` depending on what was found at import time."""
+        """使用中のバックエンド（'apsw' または 'sqlite3'）。
+        ``'apsw'`` or ``'sqlite3'`` depending on what was found at import time.
+        """
         return self._conn.backend
 
     def registered_models(self) -> list[str]:
-        """Names of all registered models."""
+        """登録されているすべてのモデル名を取得します。
+        Names of all registered models.
+
+        Returns:
+            list[str]: モデル名のリスト。
+                       List of model names.
+        """
         return [m.__name__ for m in self._registry]

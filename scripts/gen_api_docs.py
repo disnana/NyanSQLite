@@ -10,79 +10,20 @@ import nyansqlite  # noqa: F401  # imported for side effects / inspection
 
 METHOD_GROUPS = {
     "Constructor": ["__init__"],
-    "Core Methods": ["close", "table"],
-    "Dictionary Interface": [
-        "__getitem__",
-        "__setitem__",
-        "__delitem__",
-        "__contains__",
-        "__len__",
-        "__iter__",
-        "get",
-        "setdefault",
-        "pop",
-        "update",
-        "clear",
-        "clear_cache",
-        "keys",
-        "values",
-        "items",
-        "to_dict",
-        "copy",
-    ],
-    "Data Management": [
-        "load_all",
-        "refresh",
-        "get_fresh",
-        "batch_get",
-        "batch_update",
-        "batch_update_partial",
-        "batch_delete",
-        "is_cached",
-        "flush",
-        "aflush",
-        "get_dlq",
-        "aget_dlq",
-        "retry_dlq",
-        "aretry_dlq",
-        "clear_dlq",
-        "aclear_dlq",
-        "get_v2_metrics",
-        "aget_v2_metrics",
-    ],
-    "Transaction Control": ["begin_transaction", "commit", "rollback", "in_transaction", "transaction"],
-    "SQL Wrapper": ["sql_insert", "sql_update", "sql_delete", "upsert"],
-    "Query": ["query", "query_with_pagination", "count", "exists"],
-    "Direct SQL": ["execute", "execute_many", "fetch_one", "fetch_all"],
-    "Schema Management": [
-        "create_table",
-        "create_index",
-        "alter_table_add_column",
-        "drop_table",
-        "drop_index",
-        "list_tables",
-        "list_indexes",
-        "get_table_schema",
-        "table_exists",
-    ],
-    "Utils": ["vacuum", "get_db_size", "pragma", "get_last_insert_rowid"],
-    "Backup & Restore": ["backup", "restore"],
-    "Pydantic Support": ["set_model", "get_model"],
+    "Core Methods": ["register", "close", "backend", "registered_models"],
+    "CRUD Operations": ["insert", "insert_many", "update", "delete"],
+    "Query & Search": ["get", "query", "select", "search", "count", "exists"],
+    "Maintenance": ["rebuild_fts", "vacuum"],
+    "Raw SQL": ["execute_raw"],
 }
 
 GROUP_HEADERS = {
     "Constructor": {"en": "Constructor", "ja": "コンストラクタ"},
     "Core Methods": {"en": "Core Methods", "ja": "コアメソッド"},
-    "Dictionary Interface": {"en": "Dictionary Interface", "ja": "辞書インターフェース"},
-    "Data Management": {"en": "Data Management", "ja": "データ管理"},
-    "Transaction Control": {"en": "Transaction Control", "ja": "トランザクション制御"},
-    "SQL Wrapper": {"en": "SQL Wrapper (CRUD)", "ja": "SQLラッパー (CRUD)"},
-    "Query": {"en": "Query", "ja": "クエリ"},
-    "Direct SQL": {"en": "Direct SQL Execution", "ja": "直接SQL実行"},
-    "Schema Management": {"en": "Schema Management", "ja": "スキーマ管理"},
-    "Utils": {"en": "Utility Functions", "ja": "ユーティリティ関数"},
-    "Backup & Restore": {"en": "Backup & Restore", "ja": "バックアップ & リストア"},
-    "Pydantic Support": {"en": "Pydantic Support", "ja": "Pydantic サポート"},
+    "CRUD Operations": {"en": "CRUD Operations", "ja": "CRUD操作"},
+    "Query & Search": {"en": "Query & Search", "ja": "クエリ & 検索"},
+    "Maintenance": {"en": "Maintenance", "ja": "メンテナンス"},
+    "Raw SQL": {"en": "Raw SQL Execution", "ja": "生のSQL実行"},
     "Other Methods": {"en": "Other Methods", "ja": "その他のメソッド"},
 }
 
@@ -94,32 +35,40 @@ def extract_lang(text, lang="ja"):
     lines = text.split("\n")
     result_lines = []
 
+    # Simple logic: If a line has Japanese characters, it's for 'ja'.
+    # If it's pure ASCII/symbols, it could be for both, but we want to avoid 
+    # duplicating description text that was written twice (once in JA, once in EN).
+    
+    # Improved logic:
+    # 1. Example blocks (>>>) are for both.
+    # 2. Lines with Japanese are ONLY for 'ja'.
+    # 3. Lines without Japanese:
+    #    - If 'en', keep them.
+    #    - If 'ja', keep them ONLY if there are Japanese characters elsewhere in the same logical block,
+    #      or if it's a technical/code line.
+    
     for line in lines:
         clean = line.strip()
-
-        # Spacing
         if not clean:
             result_lines.append("")
             continue
 
-        # Example blocks
         if clean.startswith(">>>") or clean.startswith("..."):
             result_lines.append(line)
             continue
 
-        # Technical terms/inline code
-        if "`" in line:
-            result_lines.append(line)
-            continue
-
         has_ja = bool(re.search(r"[ぁ-んァ-ヶー一-龠]", line))
-        is_arg = bool(re.match(r"^(\s*[-*]?\s*)([\w_]+:)", line))
 
         if lang == "ja":
-            if has_ja or is_arg or not clean:
+            # In JA mode, we keep lines with JA characters, or technical lines.
+            # We also keep lines that look like "Args:", "Returns:" etc.
+            if has_ja or "`" in line or re.match(r"^(Args|Returns|Raises|Example|引数|戻り値|例外|使用例):", clean, re.I):
                 result_lines.append(line)
-        else:  # en mode
-            if not has_ja or not clean:
+            elif any(c in line for c in "()[]{}->=:"): # Likely a signature or type hint
+                 result_lines.append(line)
+        else:
+            # In EN mode, we ONLY keep lines that DON'T have Japanese.
+            if not has_ja:
                 result_lines.append(line)
 
     return "\n".join(result_lines).strip()
@@ -225,6 +174,13 @@ def format_docstring(doc, lang="ja", sig=None):
         parsed_args = {}
         last_arg = None
         for line in args_lines:
+            m = re.match(r"^\s*([\w_]+)\s*\(([\w_]+)\):(.*)$", line.strip())
+            if m:
+                p_name, p_type_hint, p_desc = m.groups()
+                parsed_args[p_name] = p_desc.strip()
+                last_arg = p_name
+                continue
+
             m = re.match(r"^\s*([\w_]+):(.*)$", line.strip())
             if m:
                 p_name, p_desc = m.groups()
@@ -241,6 +197,14 @@ def format_docstring(doc, lang="ja", sig=None):
             p_desc = parsed_args.get(p_name, "")
             p_type = get_type_name(p_param.annotation)
             p_type_text = f"`{p_type}`" if p_type != "Any" else ""
+
+            # If no description in docstring, try to find it (for ja/en mixed)
+            if not p_desc:
+                 # Try to search for the param name in args_lines even if the regex didn't catch it
+                 for line in args_lines:
+                     if p_name in line and ":" in line:
+                         p_desc = line.split(":", 1)[1].strip()
+                         break
 
             # If no description in docstring, we still list the argument if it has a type
             if p_desc or p_type_text:
@@ -313,7 +277,12 @@ def clean_signature(sig_str):
 
 
 def generate_class_md(cls_obj, title, description="", lang="ja"):
-    md = f"# {title}\n\n"
+    # VitePress frontmatter
+    md = "---\n"
+    md += "outline: [2, 3]\n"
+    md += "---\n\n"
+    
+    md += f"# {title}\n\n"
     if description:
         md += f"{description}\n\n"
 

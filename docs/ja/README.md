@@ -17,8 +17,7 @@ Pydanticモデルをそのままデータベーススキーマとして利用で
   - [ベストプラクティス](guide/best_practices.md)
   - [暗号化](guide/encryption.md)
   - [例外クラス](guide/exceptions.md)
-- [APIリファレンス](#apiリファレンス)
-  - [NyanSQLite](api/NyanSQLite.md)
+- [APIリファレンス](api.md)
 
 ---
 
