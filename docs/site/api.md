@@ -1,130 +1,229 @@
-﻿# NyanSQLite API リファレンス
+# NyanSQLite API リファレンス
 
-PydanticネイティブなSQLiteラッパー `NyanSQLite` クラスのドキュメントです。
+PydanticネイティブなSQLiteラッパー NyanSQLite クラスのドキュメントです。
 
-## クラス: `NyanSQLite`
+## NyanSQLite
 
 ```python
-class NyanSQLite:
-    def __init__(self, path: str = ":memory:", wal: bool = True, strict_deserialization: bool = False)
+class NyanSQLite(path: str = ':memory:', wal: bool = True, strict_deserialization: bool = False)
 ```
 
-### コンストラクタ
+id:      int
+            author:  Indexed[str]
+            title:   Searchable[str]
+            body:    Searchable[str]
+            views:   int = 0
 
-- `path` (str): データベースファイルのパス。デフォルトはメモリ内データベース (`:memory:`)。
-- `wal` (bool): WAL (Write-Ahead Logging) モードを有効にするかどうか。デフォルトは `True`。
-- `strict_deserialization` (bool): `True` の場合、データ読み込み時のデシリアライズ失敗で例外を発生させます。`False`（デフォルト）の場合、警告を出して生データを返します。
+#### 引数名
+
+| 引数名 | 型 | 説明 |
+|---|---|---|
+| `path` | `str` | Database file path (default: in-memory) |
+| `wal` | `bool` | Enable WAL mode (default: True) |
+| `strict_deserialization` | `bool` | If True, raise ValueError on malformed data. |
+
+
 
 ---
 
-## 主要メソッド
+## コンストラクタ
 
-### `register`
-```python
-def register(self, model: type[BaseModel]) -> None
-```
-Pydanticモデルを登録し、対応するテーブル、インデックス、FTS5仮想テーブルを自動的に作成します。
-
-### `insert`
-```python
-def insert(self, obj: BaseModel) -> None
-```
-モデルのインスタンスをデータベースに挿入します。
-
-### `insert_many`
-```python
-def insert_many(self, objs: list[BaseModel]) -> None
-```
-複数のモデルインスタンスを一括で挿入します。内部で自動的にトランザクションが使用され、大量のデータも高速に処理されます。
-
-### `query`
-```python
-def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[M]
-```
-Djangoライクなフィルタリングを使用してデータを検索し、モデルインスタンスのリストを返します。
-
-- `filters`: `"age > 20"` のような文字列形式のフィルタ。
-- `kwargs`: `name="Alice"`, `views__gte=100` のようなキーワード形式のフィルタ。
-- `limit` / `offset`: 取得件数と開始位置の制限。
-- `order_by`: ソート対象のフィールド名。
-- `desc`: `True` の場合、降順でソート。
-
-### `get`
-```python
-def get(self, model: type[M], *filters: str, **kwargs: Any) -> Optional[M]
-```
-条件に一致する最初の1件を取得します。見つからない場合は `None` を返します。
-
-### `update`
-```python
-def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> None
-```
-条件（`where`）に一致するレコードを指定した値（`fields`）で更新します。
-
-### `delete`
-```python
-def delete(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> None
-```
-条件に一致するレコードを削除します。
-
----
-
-## 検索と集計
-
-### `search`
-```python
-def search(self, model: type[M], query: str, *, limit: Optional[int] = None) -> list[M]
-```
-FTS5を使用した全文検索を実行します。`Searchable` アノテーションが付いたフィールドが対象となります。
-
-### `count`
-```python
-def count(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> int
-```
-条件に一致するレコード数を返します。
-
-### `exists`
-```python
-def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool
-```
-条件に一致するレコードが存在するかどうかを返します。
-
-### `select`
-```python
-def select(self, model: type[BaseModel], fields: list[str], *filters: str, **kwargs: Any) -> list[dict[str, Any]]
-```
-特定のフィールドのみを取得し、辞書のリストとして返します。
-
----
-
-## メンテナンスと管理
-
-### `rebuild_fts`
-```python
-def rebuild_fts(self, model: type[BaseModel]) -> None
-```
-全文検索（FTS5）インデックスを再構築します。
-
-### `vacuum`
-```python
-def vacuum(self) -> None
-```
-データベースの `VACUUM` を実行し、ファイルサイズを最適化します。
+## コアメソッド
 
 ### `close`
-```python
-def close(self) -> None
-```
-データベース接続を閉じます。
 
-### `backend`
 ```python
-def backend(self) -> NyanConnection
+def close() -> None
 ```
-下位層の `NyanConnection` オブジェクトを返します。直接的なトランザクション制御（`backend().transaction()`）などに使用できます。
+
+
+
+
+---
+
+## 辞書インターフェース
+
+### `update`
+
+```python
+def update(model: type[BaseModel], where: dict[str, Any], **fields: Any) -> int
+```
+
+#### 引数名
+
+| 引数名 | 型 | 説明 |
+|---|---|---|
+| `model` | `type[BaseModel]` |  |
+| `where` | `dict[str, Any]` | Exact-match conditions that identify the row(s). **fields: ``field=new_value`` pairs to update. |
+
+#### 戻り値
+
+**Type:** `int`
+
+
+
+---
+
+### `get`
+
+```python
+def get(model: type[M], *filters: str, **kwargs: Any) -> Optional[M]
+```
+
+Fetch the first matching row as a Pydantic model, or ``None``.
+
+
+---
+
+## クエリ
+
+### `query`
+
+```python
+def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[M]
+```
+
+Supports string filters and operator suffixes (``__gt``, ``__like``, …).
+
+
+---
+
+### `count`
+
+```python
+def count(model: type[BaseModel], *filters: str, **kwargs: Any) -> int
+```
+
+---
+
+### `exists`
+
+```python
+def exists(model: type[BaseModel], *filters: str, **kwargs: Any) -> bool
+```
+
+Return ``True`` if at least one row matches *filters* and *kwargs*.
+
+::: tip 使用例
+
+```python
+        
+        
+```
+:::
+
+
+---
+
+## ユーティリティ関数
+
+### `vacuum`
+
+```python
+def vacuum() -> None
+```
+
+
+
+
+---
+
+## その他のメソッド
+
+### `register`
+
+```python
+def register(model: type[BaseModel]) -> None
+```
+
+
+
+
+---
+
+### `insert`
+
+```python
+def insert(obj: M) -> M
+```
+
+
+
+
+---
+
+### `insert_many`
+
+```python
+def insert_many(objs: list[M]) -> int
+```
+
+#### 引数名
+
+| 引数名 | 型 | 説明 |
+|---|---|---|
+| `objs` | `list[M]` | List of model instances to insert |
+
+
+
+---
+
+### `delete`
+
+```python
+def delete(model: type[BaseModel], *filters: str, **kwargs: Any) -> int
+```
+
+---
+
+### `select`
+
+```python
+def select(model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[dict[str, Any]]
+```
+
+---
+
+### `search`
+
+```python
+def search(model: type[M], query: str, *, limit: Optional[int] = None) -> list[M]
+```
+
+Full-text search on all ``Searchable[str]`` fields.
+
+Uses FTS5 ``MATCH`` with BM25 ranking (``ORDER BY rank``).
+
+
+---
+
+### `rebuild_fts`
+
+```python
+def rebuild_fts(model: type[BaseModel]) -> None
+```
+
+
+
+
+---
+
+### `execute_raw`
+
+```python
+def execute_raw(sql: str, params: tuple = ()) -> list[dict[str, Any]]
+```
+
+---
 
 ### `registered_models`
+
 ```python
-def registered_models(self) -> list[type[BaseModel]]
+def registered_models() -> list[str]
 ```
-現在登録されているモデルのリストを返します。
+
+
+
+
+---
+
