@@ -38,7 +38,8 @@ classifiers = [
     "Typing :: Typed"
 ]
 dependencies = [
-    "apsw>=3.40.0.0"
+    "apsw>=3.40.0.0",
+    "pydantic>2.0.0"
 ]
 
 [project.optional-dependencies]
