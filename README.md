@@ -136,11 +136,13 @@ top_players = db.query(Player, order_by="score", desc=True, limit=10)
 
 # 条件付き検索＆更新
 high_level = db.query(Player, level__gte=40, limit=100)
+mid_level = db.query(Player, "level > 10", "level < 40") # 文字列形式のフィルタ
 db.update(Player, where={"player_id": 1}, score=9999)
 
 # 数を数える
 player_count = db.count(Player)
 active_count = db.count(Player, level__gte=30)
+pro_count = db.count(Player, "level > 40")  # 文字列形式
 ```
 
 ### 📊 パフォーマンス
@@ -215,6 +217,7 @@ if db.exists(Article, id=1):
 
 # 部分取得（カラムを指定）
 titles = db.select(Article, ["title", "author"], views__gte=100)
+recent_titles = db.select(Article, ["title"], "views > 10", "id > 100")
 ```
 
 ### 🚨 型モデルのベストプラクティス

@@ -95,6 +95,58 @@ def test_complex_query(db):
     assert len(results) == 1
     assert results[0].name == 'Taro'
 
+    # age != 30
+    results = db.query(User, age__ne=30)
+    assert len(results) == 2
+    assert {r.name for r in results} == {'Taro', 'Saburo'}
+
+    # age >= 20, age <= 30
+    results = db.query(User, age__gte=20, age__lte=30)
+    assert len(results) == 2
+
+    # is_null
+    db.insert(User(id=13, name='NullAge', age=0)) # age is int, so it can't be null in this schema usually, but let's test the syntax
+    # Actually, User.age is int, pydantic might complain if it's None. 
+    # Let's use a model with Optional field for null test.
+
+def test_null_queries(db):
+    class Note(BaseModel):
+        id: Optional[int] = None
+        content: Optional[str] = None
+
+    db.register(Note)
+    db.insert(Note(id=1, content="hello"))
+    db.insert(Note(id=2, content=None))
+
+    assert db.count(Note, content__is_null=True) == 1
+    assert db.count(Note, content__is_null=False) == 1
+    assert db.get(Note, content__is_null=True).id == 2
+
+def test_string_filters(db):
+    """Test string format filters like 'age > 10'."""
+    db.insert(User(id=30, name='Filter1', age=10))
+    db.insert(User(id=31, name='Filter2', age=20))
+    db.insert(User(id=32, name='Filter3', age=30))
+
+    # This is what we want to support
+    results = db.query(User, "age > 15")
+    assert len(results) == 2
+    assert {r.id for r in results} == {31, 32}
+
+    results = db.query(User, "age <= 20", "id > 30")
+    assert len(results) == 1
+    assert results[0].id == 31
+
+    # Test with quotes
+    db.insert(User(id=33, name='Special One', age=50))
+    assert db.count(User, "name = 'Special One'") == 1
+    assert db.count(User, 'name = "Special One"') == 1
+
+    # Test select with string filters
+    names = db.select(User, ["name"], "age > 40")
+    assert len(names) == 1
+    assert names[0]["name"] == "Special One"
+
 def test_insert_many(db):
     """Test bulk insertion."""
     users = [

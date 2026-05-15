@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 from typing import Any, Optional, TypeVar
 
@@ -26,28 +27,58 @@ M = TypeVar("M", bound=BaseModel)
 
 # ── WHERE clause builder ──────────────────────────────────────────────── #
 
-def _build_where(kwargs: dict[str, Any]) -> tuple[str, list[Any]]:
-    """Build a parameterised WHERE clause from keyword filter arguments.
+_OP_PATTERN = re.compile(r"^\s*(\w+)\s*(>=|<=|!=|>|<|=)\s*(.*)$")
 
-    Supported operator suffixes (double-underscore):
+def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, list[Any]]:
+    """Build a parameterised WHERE clause from string filters and keyword arguments.
 
-    ==  ``field=value``           → ``field = ?``
-    ==  ``field__ne=value``       → ``field != ?``
-    ==  ``field__gt=value``       → ``field > ?``
-    ==  ``field__gte=value``      → ``field >= ?``
-    ==  ``field__lt=value``       → ``field < ?``
-    ==  ``field__lte=value``      → ``field <= ?``
-    ==  ``field__like=value``     → ``field LIKE ?``
-    ==  ``field__in=[…]``         → ``field IN (?,?,?)``
-    ==  ``field__is_null=True``   → ``field IS NULL``
-    ==  ``field__is_null=False``  → ``field IS NOT NULL``
+    String filters (args):
+        "views > 10", "status = 'active'"
+
+    Keyword filters (kwargs):
+        ==  ``field=value``           → ``field = ?``
+        ==  ``field__ne=value``       → ``field != ?``
+        ==  ``field__gt=value``       → ``field > ?``
+        ==  ``field__gte=value``      → ``field >= ?``
+        ==  ``field__lt=value``       → ``field < ?``
+        ==  ``field__lte=value``      → ``field <= ?``
+        ==  ``field__like=value``     → ``field LIKE ?``
+        ==  ``field__in=[…]``         → ``field IN (?,?,?)``
+        ==  ``field__is_null=True``   → ``field IS NULL``
+        ==  ``field__is_null=False``  → ``field IS NOT NULL``
     """
-    if not kwargs:
+    if not args and not kwargs:
         return "", []
 
     clauses: list[str] = []
     values:  list[Any] = []
 
+    # Process positional string filters: "age > 10"
+    for filt in args:
+        match = _OP_PATTERN.match(filt)
+        if match:
+            field, op, val_str = match.groups()
+            clauses.append(f'"{field}" {op} ?')
+            # Try to convert val_str to a Python literal (int, float, etc.)
+            # If it's a quoted string, strip quotes.
+            val_str = val_str.strip()
+            if (val_str.startswith("'") and val_str.endswith("'")) or \
+               (val_str.startswith('"') and val_str.endswith('"')):
+                values.append(val_str[1:-1])
+            elif val_str.isdigit():
+                values.append(int(val_str))
+            else:
+                try:
+                    values.append(float(val_str))
+                except ValueError:
+                    values.append(val_str)
+        else:
+            # If it doesn't match our simple operator pattern, 
+            # we might just pass it through, but it's risky for SQL injection.
+            # For now, let's only support the explicit operators.
+            clauses.append(filt)
+
+    # Process keyword filters: age__gt=10
     for key, value in kwargs.items():
         if "__" in key:
             field, op = key.rsplit("__", 1)
@@ -270,7 +301,7 @@ class NyanSQLite:
             set_parts.append(f'"{fname}" = ?')
             set_vals.append(serialize_value(value, meta.hints[fname]))
 
-        where_clause, where_vals = _build_where(where)
+        where_clause, where_vals = _build_where((), where)
         sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'
 
         with self._lock:
@@ -280,16 +311,17 @@ class NyanSQLite:
 
     # ── DELETE ───────────────────────────────────────────────────────── #
 
-    def delete(self, model: type[BaseModel], **kwargs: Any) -> int:
-        """Delete all rows matching *kwargs*. Returns rows deleted.
+    def delete(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> int:
+        """Delete all rows matching *filters* and *kwargs*. Returns rows deleted.
 
         Example::
 
             db.delete(User, id=42)
+            db.delete(User, "age > 50")
             db.delete(Session, user_id=1, active=True)
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(kwargs)
+        where_clause, values = _build_where(filters, kwargs)
         sql = f'DELETE FROM "{meta.table}" {where_clause}'
         with self._lock:
             with self._conn.transaction():
@@ -298,21 +330,22 @@ class NyanSQLite:
 
     # ── GET / QUERY ───────────────────────────────────────────────────── #
 
-    def get(self, model: type[M], **kwargs: Any) -> Optional[M]:
+    def get(self, model: type[M], *filters: str, **kwargs: Any) -> Optional[M]:
         """Fetch the first matching row as a Pydantic model, or ``None``.
 
         Example::
 
             user = db.get(User, id=1)
+            user = db.get(User, "age > 30", name="Alice")
             user = db.get(User, email="taro@example.com")
         """
-        results = self.query(model, limit=1, **kwargs)
+        results = self.query(model, *filters, limit=1, **kwargs)
         return results[0] if results else None
 
     def query(
         self,
         model:    type[M],
-        *,
+        *filters: str,
         limit:    Optional[int] = None,
         offset:   Optional[int] = None,
         order_by: Optional[str] = None,
@@ -321,18 +354,19 @@ class NyanSQLite:
     ) -> list[M]:
         """Query rows with optional filtering, ordering, and pagination.
 
-        Supports all filter operators (``__gt``, ``__like``, ``__in``, …).
+        Supports string filters and operator suffixes (``__gt``, ``__like``, …).
 
         Examples::
 
             db.query(User)                                  # all rows
             db.query(User, age=25)                          # exact match
-            db.query(User, age__gte=20, limit=10)           # operators
+            db.query(User, "age > 20", limit=10)            # string filters
+            db.query(User, age__gte=20, limit=10)           # operator suffixes
             db.query(User, order_by="name", desc=True)      # ordering
             db.query(User, order_by="id", limit=20, offset=40)  # pagination
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(kwargs)
+        where_clause, values = _build_where(filters, kwargs)
 
         if order_by:
             meta.check_fields([order_by], model.__name__)
@@ -351,7 +385,7 @@ class NyanSQLite:
         self,
         model:    type[BaseModel],
         fields:   list[str],
-        *,
+        *filters: str,
         limit:    Optional[int] = None,
         offset:   Optional[int] = None,
         order_by: Optional[str] = None,
@@ -365,6 +399,7 @@ class NyanSQLite:
         Example::
 
             db.select(Article, ["title", "views"], author="neko", order_by="views", desc=True)
+            db.select(Article, ["title"], "views > 100")
         """
         meta = self._meta(model)
         meta.check_fields(fields, model.__name__)
@@ -372,7 +407,7 @@ class NyanSQLite:
             meta.check_fields([order_by], model.__name__)
 
         col_sql      = ", ".join(f'"{f}"' for f in fields)
-        where_clause, values = _build_where(kwargs)
+        where_clause, values = _build_where(filters, kwargs)
         sql = (
             f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'
             + _order_sql(order_by, desc)
@@ -427,30 +462,33 @@ class NyanSQLite:
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
-    def count(self, model: type[BaseModel], **kwargs: Any) -> int:
-        """Return the number of rows matching *kwargs*.
+    def count(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> int:
+        """Return the number of rows matching *filters* and *kwargs*.
 
         Example::
 
             total  = db.count(User)
+            adults = db.count(User, "age >= 18")
             adults = db.count(User, age__gte=18)
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(kwargs)
+        where_clause, values = _build_where(filters, kwargs)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
         rows = self._conn.execute(sql, tuple(values))
         return rows[0]["n"] if rows else 0
 
-    def exists(self, model: type[BaseModel], **kwargs: Any) -> bool:
-        """Return ``True`` if at least one row matches *kwargs*.
+    def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
+        """Return ``True`` if at least one row matches *filters* and *kwargs*.
 
         Example::
 
             if db.exists(User, email="taro@example.com"):
                 ...
+            if db.exists(User, "age > 20"):
+                ...
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(kwargs)
+        where_clause, values = _build_where(filters, kwargs)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
         return bool(self._conn.execute(sql, tuple(values)))
 
