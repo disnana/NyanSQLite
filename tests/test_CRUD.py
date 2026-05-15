@@ -106,7 +106,7 @@ def test_complex_query(db):
 
     # is_null
     db.insert(User(id=13, name='NullAge', age=0)) # age is int, so it can't be null in this schema usually, but let's test the syntax
-    # Actually, User.age is int, pydantic might complain if it's None. 
+    # Actually, User.age is int, pydantic might complain if it's None.
     # Let's use a model with Optional field for null test.
 
 def test_null_queries(db):

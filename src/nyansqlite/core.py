@@ -73,7 +73,7 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                 except ValueError:
                     values.append(val_str)
         else:
-            # If it doesn't match our simple operator pattern, 
+            # If it doesn't match our simple operator pattern,
             # we might just pass it through, but it's risky for SQL injection.
             # For now, let's only support the explicit operators.
             clauses.append(filt)
