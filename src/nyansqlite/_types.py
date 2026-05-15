@@ -101,7 +101,11 @@ def serialize_value(value: Any, annotation: Any) -> Any:
 
 
 def deserialize_value(value: Any, annotation: Any) -> Any:
-    """Convert a SQLite scalar back to the correct Python type."""
+    """Convert a SQLite scalar back to the correct Python type.
+
+    Includes safe fallback for corrupted or malformed data to prevent
+    deserialization errors from crashing the application.
+    """
     if value is None:
         return None
     base, _ = resolve_type(annotation)
@@ -111,10 +115,43 @@ def deserialize_value(value: Any, annotation: Any) -> Any:
         return bool(value)
     if origin in (dict, list) or base in (dict, list):
         if isinstance(value, str):
-            return json.loads(value)
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, ValueError) as e:
+                # Log and return the raw value if JSON is malformed
+                import warnings
+                warnings.warn(
+                    f"Malformed JSON data: {value!r}. Returning as raw string. "
+                    f"Error: {e}",
+                    category=RuntimeWarning,
+                    stacklevel=2
+                )
+                return value
         return value
     if base is datetime:
-        return datetime.fromisoformat(value)
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError, AttributeError) as e:
+            # Fallback: return raw value and warn
+            import warnings
+            warnings.warn(
+                f"Invalid datetime format: {value!r}. Expected ISO8601 format. "
+                f"Returning as raw value. Error: {e}",
+                category=RuntimeWarning,
+                stacklevel=2
+            )
+            return value
     if base is date:
-        return date.fromisoformat(value)
+        try:
+            return date.fromisoformat(value)
+        except (ValueError, TypeError, AttributeError) as e:
+            # Fallback: return raw value and warn
+            import warnings
+            warnings.warn(
+                f"Invalid date format: {value!r}. Expected ISO8601 format (YYYY-MM-DD). "
+                f"Returning as raw value. Error: {e}",
+                category=RuntimeWarning,
+                stacklevel=2
+            )
+            return value
     return value

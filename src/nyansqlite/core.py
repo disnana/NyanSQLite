@@ -20,6 +20,7 @@ from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
     SearchNotEnabledError,
+    TableNameCollisionError,
 )
 
 M = TypeVar("M", bound=BaseModel)
@@ -198,10 +199,24 @@ class NyanSQLite:
     # ── registration ─────────────────────────────────────────────────── #
 
     def register(self, model: type[BaseModel]) -> None:
-        """Introspect *model* and create table + indexes + FTS5 virtual table."""
+        """Introspect *model* and create table + indexes + FTS5 virtual table.
+
+        Raises TableNameCollisionError if a different model is already registered with the same table name.
+        """
         table  = model_to_table_name(model)
         pk     = get_primary_key(model)
         hints  = model_hints(model)
+
+        # Check for table name collisions with different models
+        for existing_model, meta in self._registry.items():
+            if meta.table == table and existing_model is not model:
+                raise TableNameCollisionError(
+                    f"Table name collision detected: "
+                    f"{existing_model.__name__} → '{table}' but also "
+                    f"{model.__name__} → '{table}'. "
+                    f"This can happen with CamelCase variants (e.g., 'UserAuth' and 'User_Auth'). "
+                    f"Use explicit __tablename__ override or rename one of the models."
+                )
 
         with self._lock:
             with self._conn.transaction():
@@ -376,8 +391,9 @@ class NyanSQLite:
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
-        rows = self._conn.execute(sql, tuple(values))
-        return [self._from_row(model, meta, r) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
+            return [self._from_row(model, meta, r) for r in rows]
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -413,11 +429,12 @@ class NyanSQLite:
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
-        rows = self._conn.execute(sql, tuple(values))
-        return [
-            {f: deserialize_value(row.get(f), meta.hints[f]) for f in fields}
-            for row in rows
-        ]
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
+            return [
+                {f: deserialize_value(row.get(f), meta.hints[f]) for f in fields}
+                for row in rows
+            ]
 
     # ── FTS5 SEARCH ───────────────────────────────────────────────────── #
 
@@ -457,8 +474,9 @@ class NyanSQLite:
             f'ORDER BY rank'
             + _limit_sql(limit, None)
         )
-        rows = self._conn.execute(sql, (query,))
-        return [self._from_row(model, meta, r) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(sql, (query,))
+            return [self._from_row(model, meta, r) for r in rows]
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
@@ -474,8 +492,9 @@ class NyanSQLite:
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
-        rows = self._conn.execute(sql, tuple(values))
-        return rows[0]["n"] if rows else 0
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
+            return rows[0]["n"] if rows else 0
 
     def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
         """Return ``True`` if at least one row matches *filters* and *kwargs*.
@@ -490,7 +509,8 @@ class NyanSQLite:
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
-        return bool(self._conn.execute(sql, tuple(values)))
+        with self._lock:
+            return bool(self._conn.execute(sql, tuple(values)))
 
     # ── MAINTENANCE ───────────────────────────────────────────────────── #
 
@@ -499,9 +519,10 @@ class NyanSQLite:
         meta = self._meta(model)
         if not meta.fts_table:
             return
-        self._conn.execute(
-            f'INSERT INTO "{meta.fts_table}"("{meta.fts_table}") VALUES(\'rebuild\')'
-        )
+        with self._lock:
+            self._conn.execute(
+                f'INSERT INTO "{meta.fts_table}"("{meta.fts_table}") VALUES(\'rebuild\')'
+            )
 
     def vacuum(self) -> None:
         """VACUUM the database to reclaim disk space."""
