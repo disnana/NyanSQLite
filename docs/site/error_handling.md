@@ -73,7 +73,7 @@ except NanaSQLiteValidationError as e:
     print(f"スキーマ違反: {e}")
 ```
 
-インストール方法、`coerce`、テーブルごとのスキーマ例は [バリデーションガイド](./validation_guide.md) を参照してください。
+インストール方法、`coerce`、テーブルごとのスキーマ例は [バリデーションガイド](./validation) を参照してください。
 
 #### `NanaSQLiteDatabaseError`
 

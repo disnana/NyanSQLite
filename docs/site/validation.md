@@ -89,5 +89,5 @@ db = NyanSQLite("app.db", strict_deserialization=True)
 
 ## 関連リファレンス
 
-- [NyanSQLite API リファレンス](../api/NyanSQLite.md)
+- [NyanSQLite API リファレンス](./api)
 - [Pydantic 公式ドキュメント](https://docs.pydantic.dev/)

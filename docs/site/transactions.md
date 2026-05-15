@@ -43,6 +43,6 @@ with db.backend().transaction():
 
 ## 関連リファレンス
 
-- [NyanSQLite API リファレンス](../api/NyanSQLite.md)
+- [NyanSQLite API リファレンス](./api)
 - [APSW トランザクション・ドキュメント](https://rogerbinns.github.io/apsw/connection.html#apsw.Connection.transaction)
 

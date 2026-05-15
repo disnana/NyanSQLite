@@ -8,17 +8,16 @@ A Pydantic-native SQLite wrapper that allows you to use Pydantic models directly
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Guides](#guides)
-  - [Tutorial](guide/tutorial.md)
-  - [Validation](guide/validation.md)
-  - [Async Support](guide/async.md)
-  - [Transactions](guide/transactions.md)
-  - [Error Handling](guide/error_handling.md)
-  - [Performance](guide/performance.md)
-  - [Best Practices](guide/best_practices.md)
-  - [Encryption](guide/encryption.md)
-  - [Exceptions](guide/exceptions.md)
+  - [Tutorial](./tutorial)
+  - [Validation](./validation)
+  - [Async Support](./async)
+  - [Transactions](./transactions)
+  - [Error Handling](./error_handling)
+  - [Best Practices](./best_practices)
+  - [Encryption](./encryption)
+  - [Exceptions](./exceptions)
 - [API Reference](#api-reference)
-  - [NyanSQLite](api/NyanSQLite.md)
+  - [NyanSQLite](../api)
 
 ---
 
@@ -102,15 +101,14 @@ db.close()
 
 For more detailed information, please refer to the following guides:
 
-- **[Tutorial](guide/tutorial.md)**: Extended examples including multiple tables and advanced features.
-- **[Validation](guide/validation.md)**: Schema validation and data handling with Pydantic.
-- **[Async Support](guide/async.md)**: Using NyanSQLite in asynchronous environments.
-- **[Transactions](guide/transactions.md)**: Ensuring data integrity and optimizing bulk writes.
-- **[Error Handling](guide/error_handling.md)**: Handling exceptions and troubleshooting.
-- **[Performance](guide/performance.md)**: Tuning NyanSQLite for maximum speed.
-- **[Best Practices](guide/best_practices.md)**: Recommended patterns for production use.
-- **[Encryption](guide/encryption.md)**: Securing your data at rest.
-- **[Exceptions](guide/exceptions.md)**: Complete exception class reference.
+- **[Tutorial](./tutorial)**: Extended examples including multiple tables and advanced features.
+- **[Validation](./validation)**: Schema validation and data handling with Pydantic.
+- **[Async Support](./async)**: Using NyanSQLite in asynchronous environments.
+- **[Transactions](./transactions)**: Ensuring data integrity and optimizing bulk writes.
+- **[Error Handling](./error_handling)**: Handling exceptions and troubleshooting.
+- **[Best Practices](./best_practices)**: Recommended patterns for production use.
+- **[Encryption](./encryption)**: Securing your data at rest.
+- **[Exceptions](./exceptions)**: Complete exception class reference.
 
 ---
 
@@ -118,4 +116,4 @@ For more detailed information, please refer to the following guides:
 
 Complete documentation for all classes and methods.
 
-- **[NyanSQLite](api/NyanSQLite.md)**
+- **[NyanSQLite](../api)**

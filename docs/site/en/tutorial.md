@@ -135,6 +135,5 @@ if db.exists(User, id=1):
 
 ## Next Steps
 
-- See [validation.md](validation.md) for detailed validation.
-- See [performance.md](performance.md) for performance tuning.
-- See [API Reference](../api/NyanSQLite.md) for full method documentation.
+- See [validation](./validation) for detailed validation.
+- See [API Reference](./api) for full method documentation.

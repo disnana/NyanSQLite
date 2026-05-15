@@ -135,6 +135,5 @@ if db.exists(User, id=1):
 
 ## 次のステップ
 
-- 詳細なバリデーションについては [validation.md](validation.md) を参照
-- パフォーマンスの詳細は [performance.md](performance.md) を参照
-- APIの全容は [APIリファレンス](../api/NyanSQLite.md) を参照
+- 詳細なバリデーションについては [validation](./validation) を参照
+- APIの全容は [APIリファレンス](./api) を参照

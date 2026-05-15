@@ -8,17 +8,16 @@ Pydanticモデルをそのままデータベーススキーマとして利用で
 - [インストール](#インストール)
 - [クイックスタート](#クイックスタート)
 - [ガイド](#ガイド)
-  - [チュートリアル](guide/tutorial.md)
-  - [バリデーション](guide/validation.md)
-  - [非同期サポート](guide/async.md)
-  - [トランザクション](guide/transactions.md)
-  - [エラーハンドリング](guide/error_handling.md)
-  - [パフォーマンス](guide/performance.md)
-  - [ベストプラクティス](guide/best_practices.md)
-  - [暗号化](guide/encryption.md)
-  - [例外クラス](guide/exceptions.md)
+  - [チュートリアル](./tutorial)
+  - [バリデーション](./validation)
+  - [非同期サポート](./async)
+  - [トランザクション](./transactions)
+  - [エラーハンドリング](./error_handling)
+  - [ベストプラクティス](./best_practices)
+  - [暗号化](./encryption)
+  - [例外クラス](./exceptions)
 - [APIリファレンス](#apiリファレンス)
-  - [NyanSQLite](api/NyanSQLite.md)
+  - [NyanSQLite](./api)
 
 ---
 
@@ -102,15 +101,14 @@ db.close()
 
 詳細な情報は以下のガイドを参照してください：
 
-- **[チュートリアル](guide/tutorial.md)**: 複数テーブルや高度な機能を含む詳細な例。
-- **[バリデーション](guide/validation.md)**: Pydanticによるスキーマ検証とデータ型の扱い。
-- **[非同期サポート](guide/async.md)**: 非同期環境での使用方法。
-- **[トランザクション](guide/transactions.md)**: データの整合性と一括書き込みの最適化。
-- **[エラーハンドリング](guide/error_handling.md)**: 例外処理とトラブルシューティング。
-- **[パフォーマンス](guide/performance.md)**: NyanSQLiteの速度チューニング。
-- **[ベストプラクティス](guide/best_practices.md)**: 本番環境での推奨パターン。
-- **[暗号化](guide/encryption.md)**: データの安全な保存。
-- **[例外クラス](guide/exceptions.md)**: 例外クラスの詳細リファレンス。
+- **[チュートリアル](./tutorial)**: 複数テーブルや高度な機能を含む詳細な例。
+- **[バリデーション](./validation)**: Pydanticによるスキーマ検証とデータ型の扱い。
+- **[非同期サポート](./async)**: 非同期環境での使用方法。
+- **[トランザクション](./transactions)**: データの整合性と一括書き込みの最適化。
+- **[エラーハンドリング](./error_handling)**: 例外処理とトラブルシューティング。
+- **[ベストプラクティス](./best_practices)**: 本番環境での推奨パターン。
+- **[暗号化](./encryption)**: データの安全な保存。
+- **[例外クラス](./exceptions)**: 例外クラスの詳細リファレンス。
 
 ---
 
@@ -118,4 +116,4 @@ db.close()
 
 全クラス・メソッドの完全なドキュメント。
 
-- **[NyanSQLite](api/NyanSQLite.md)**
+- **[NyanSQLite](./api)**

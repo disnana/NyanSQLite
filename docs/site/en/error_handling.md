@@ -70,7 +70,7 @@ except NanaSQLiteValidationError as e:
     print(f"Schema violation: {e}")
 ```
 
-For installation, coercion, and per-table schema patterns, see the [Validation Guide](./validation_guide.md).
+For installation, coercion, and per-table schema patterns, see the [Validation Guide](./validation).
 
 #### `NanaSQLiteDatabaseError`
 

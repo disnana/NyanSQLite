@@ -43,5 +43,5 @@ Using transactions drastically improves SQLite's write performance by reducing t
 
 ## Related References
 
-- [NyanSQLite API Reference](../api/NyanSQLite.md)
+- [NyanSQLite API Reference](../api)
 - [APSW Transaction Documentation](https://rogerbinns.github.io/apsw/connection.html#apsw.Connection.transaction)
