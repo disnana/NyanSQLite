@@ -1,15 +1,10 @@
-NanaSQLiteの進化系として、より構造化されたデータ管理と高度な検索に特化した「NyanSQLite」用のREADME.mdを作成しました。
-Pydanticの強力なバリデーションとSQLiteの高速な検索性能（FTS5）を融合させた、モダンな開発者向けのドキュメント構成にしています。
-
----
-
 # NyanSQLite
 
 [![PyPI version](https://img.shields.io/pypi/v/nyansqlite.svg)](https://pypi.org/project/nyansqlite/)
 [![Python versions](https://img.shields.io/pypi/pyversions/nyansqlite.svg)](https://pypi.org/project/nyansqlite/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-**A type-safe, high-performance SQLite wrapper powered by Pydantic and FTS5.**
+**Pythonic SQLite with Pydantic models, Django-like queries, and FTS5 full-text search.**
 
 [English](#english) | [日本語](#日本語)
 
@@ -17,17 +12,19 @@ Pydanticの強力なバリデーションとSQLiteの高速な検索性能（FTS
 
 ## 日本語
 
-NyanSQLiteは、Pydanticモデルをそのままデータベースのスキーマとして利用できる、型安全なSQLiteラッパーです。
-SQLを意識することなく、Djangoライクな直感的なクエリや、SQLiteの強力な全文検索エンジン（FTS5）を最大限に活用できます。
+NyanSQLiteは、Pydanticモデルをそのままデータベーススキーマとして利用できる、型安全で高性能なSQLiteラッパーです。  
+複雑なSQLを書くことなく、Pythonの型ヒントと直感的なクエリでデータを管理できます。
 
 ### 🚀 主な特徴
 
-*   **Pydanticベースのスキーマ定義**: 型ヒントを利用した自動バリデーションと、シームレスなデータ変換
-*   **Djangoライクなクエリ演算子**: `__gte` や `__contains` を使った直感的なフィルタリング
-*   **高速な全文検索 (FTS5)**: 大規模なテキストデータからの爆速検索を標準サポート
-*   **インデックスの自動管理**: `Indexed` アノテーションによるB-treeインデックスの自動構築
-*   **柔軟なデータ保存**: `dict` や `numpy.ndarray` といった複雑な型を透明に処理
-*   **パフォーマンス最適化**: WALモードやバッチ処理（Bulk Insert）による高い書き込み性能
+| 機能 | 説明 |
+|-----|------|
+| **Pydanticベースのスキーマ** | 型ヒントで自動バリデーション、JSON変換も透過的 |
+| **Djangoライクなクエリ** | `__gte`, `__in`, `__like` など直感的なフィルタリング |
+| **FTS5全文検索** | テキストデータから高速に検索結果を取得 |
+| **自動インデックス管理** | `Indexed[T]` アノテーションで B-tree インデックスを自動構築 |
+| **複雑な型を透過的に処理** | dict や list を JSON で保存、自動で Python オブジェクトに戻す |
+| **パフォーマンス最適化** | WAL モード、バッチ処理による高速化 |
 
 ### 📦 インストール
 
@@ -35,120 +32,282 @@ SQLを意識することなく、Djangoライクな直感的なクエリや、SQ
 pip install nyansqlite
 ```
 
-### 🏗️ アーキテクチャ
+Pydantic v2が必須です：
 
-```mermaid
-graph TD
-    User[User Defined Model] -->|Register| Nyan[NyanSQLite Engine]
-    Nyan -->|Schema Mapping| SQL[(SQLite DB)]
-    Nyan -->|B-Tree| Index[Searchable / Indexed]
-    Nyan -->|FTS5| Search[Full Text Search]
-    SQL -->|JSON/Blob| Complex[Dict / NumPy]
+```bash
+pip install "pydantic>=2.0"
 ```
 
-### ⚡ クイックスタート
-
-以下のコード一つで、定義・登録・挿入・検索・更新のすべてが完結します。
+### ⚡ 5分クイックスタート
 
 ```python
-from __future__ import annotations
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, Dict, Any
-import numpy as np
-
+from pydantic import BaseModel
 from nyansqlite import NyanSQLite, Indexed, Searchable
 
-# --- 1. スキーマ定義 ---
+# 1️⃣ スキーマ定義（型ヒント＋Pydantic）
 class Article(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    
-    id: Optional[int] = None           # 主キー（自動採番）
-    author: Indexed[str]               # B-tree インデックス対象
-    title: Searchable[str]             # 全文検索対象
-    body: Searchable[str]              # 全文検索対象
-    tags: Indexed[str]                 # タグ検索用インデックス
-    metadata: Dict[str, Any]           # 内部で自動的にJSON変換
+    id: int                      # idフィールドが自動的に主キーになる
+    author: Indexed[str]         # インデックス付きカラム
+    title: Searchable[str]       # 全文検索対象
+    body: Searchable[str]        # 全文検索対象
     views: int = 0
 
-# --- 2. データベースの初期化とデータ登録 ---
-db = NyanSQLite("nyan_database.db")
+# 2️⃣ DB初期化＆テーブル作成
+db = NyanSQLite("blog.db")
 db.register(Article)
 
-# バッチ処理による高速な挿入
-db.insert_many([
-    Article(
-        author="neko_sensei",
-        title="NyanSQLite活用術",
-        body="PydanticとSQLiteを組み合わせることで、開発効率が劇的に向上します。",
-        tags="python,sqlite",
-        metadata={"category": "tech"}
-    ),
-    Article(
-        author="kuro",
-        title="SQLite FTS5の魔法",
-        body="高速な全文検索をあなたのPythonアプリに導入しましょう。",
-        tags="database,sql",
-        metadata={"category": "tips"}
-    )
-])
+# 3️⃣ データ挿入
+db.insert(Article(
+    id=1,
+    author="neko",
+    title="SQLiteを使いこなそう",
+    body="NyanSQLiteで簡単にデータ管理ができます。"
+))
 
-# --- 3. Django風のクエリ実行 ---
-# IDが大きく、かつタグに "python" を含む記事を抽出
-print("--- [Filter Results] ---")
-posts = db.query(
-    Article, 
-    id__gte=1,
-    tags__contains="python",
-    order_by="id",
-    desc=True
-)
-for p in posts:
-    print(f"[{p.author}] {p.title}")
+# 4️⃣ クエリ実行（Django風）
+articles = db.query(Article, author="neko", views__gte=0, order_by="id", desc=True)
 
-# --- 4. パワフルな全文検索 (FTS5) ---
-print("\n--- [Full Text Search Results] ---")
-results = db.search(Article, "SQLite 魔法")
+# 5️⃣ 全文検索（FTS5）
+results = db.search(Article, "SQLite")
 for hit in results:
-    print(f"Match found: {hit.title}")
+    print(f"✨ {hit.title}")
 
 db.close()
 ```
 
-### 🔧 便利なクエリ演算子
-
-NyanSQLiteでは以下の演算子が利用可能です。
-
-*   `field=value`: 完全一致
-*   `field__contains="word"`: 部分一致
-*   `field__in=[1, 2, 3]`: 複数値のいずれかに一致
-*   `field__gte=10`: 指定値以上
-*   `field__lte=10`: 指定値以下
-
-### 📚 メンテナンス
-
-データベースの最適化やクリーンアップも簡単です。
+### 🔍 クエリ演算子リファレンス
 
 ```python
-db.vacuum()  # データベースファイルの断片化を解消
+# 完全一致
+db.query(Article, author="neko")
+
+# 演算子フィルタ
+db.query(Article, 
+    views__gt=10,           # >
+    views__gte=10,          # >=
+    views__lt=100,          # <
+    views__lte=100,         # <=
+    views__ne=50,           # !=
+)
+
+# 文字列フィルタ
+db.query(Article,
+    title__like="%Python%", # LIKE検索
+)
+
+# IN句
+db.query(Article,
+    id__in=[1, 2, 3],
+)
+
+# NULL チェック
+db.query(Article,
+    author__is_null=False,
+)
+```
+
+### 🎯 実装例：ゲームのプレイヤーシステム
+
+```python
+from datetime import datetime
+from pydantic import BaseModel
+
+class Player(BaseModel):
+    player_id: int                    # 主キー
+    username: Indexed[str]            # ユーザー名でインデックス
+    level: Indexed[int]               # レベルでインデックス
+    score: int = 0
+    created_at: datetime
+
+db = NyanSQLite("game.db")
+db.register(Player)
+
+# バッチ登録（大量データが高速）
+players = [
+    Player(player_id=i, username=f"player_{i}", level=i%50, created_at=datetime.now())
+    for i in range(1, 1001)
+]
+db.insert_many(players)
+
+# ランキング取得
+top_players = db.query(Player, order_by="score", desc=True, limit=10)
+
+# 条件付き検索＆更新
+high_level = db.query(Player, level__gte=40, limit=100)
+db.update(Player, where={"player_id": 1}, score=9999)
+
+# 数を数える
+player_count = db.count(Player)
+active_count = db.count(Player, level__gte=30)
+```
+
+### 📊 パフォーマンス
+
+NyanSQLiteは以下の最適化を実装しています：
+
+- **WAL モード**: 読み書き同時実行性の向上
+- **トランザクション**: `insert_many()` はデフォルトでトランザクション内で実行
+- **パラメータ化クエリ**: SQL インジェクション対策も兼ねた安全性
+
+```python
+# 10万件をわずか０秒台で挿入（バッチ処理）
+import time
+players = [Player(player_id=i, ...) for i in range(100000)]
+start = time.time()
+db.insert_many(players)
+print(f"Inserted in {time.time() - start:.4f}s")  # 例: 0.3456s
+```
+
+### 🛠️ 高度な機能
+
+#### 複合インデックス
+
+```python
+from nyansqlite import CompositeIndex
+
+class Order(BaseModel):
+    __nyan_indexes__ = [
+        CompositeIndex("user_id", "created_at"),
+        CompositeIndex("product_id", "status", unique=True),
+    ]
+    id: int
+    user_id: int
+    product_id: int
+    created_at: datetime
+    status: str
+```
+
+#### 主キーのカスタマイズ
+
+フィールド名が `id` でない場合：
+
+```python
+class User(BaseModel):
+    __nyan_primary_key__ = "user_id"
+    user_id: int
+    email: str
+    name: str
+```
+
+#### コンテキストマネージャー
+
+```python
+with NyanSQLite("app.db") as db:
+    db.register(Article)
+    db.insert(Article(...))
+    # 自動的にcloseされる
+```
+
+### 🧹 メンテナンス
+
+```python
+# インデックスの再構築
+db.rebuild_fts(Article)
+
+# データベース最適化（ファイルサイズを縮小）
+db.vacuum()
+
+# 存在確認
+if db.exists(Article, id=1):
+    print("Found!")
+
+# 部分取得（カラムを指定）
+titles = db.select(Article, ["title", "author"], views__gte=100)
+```
+
+### 🚨 型モデルのベストプラクティス
+
+```python
+from pydantic import ConfigDict
+
+class Article(BaseModel):
+    # Pydantic v2の設定
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,  # 複雑な型をサポート
+        validate_assignment=True,
+    )
+    
+    id: int
+    # ... その他フィールド
 ```
 
 ---
 
 ## English
 
-NyanSQLite is a type-safe, high-performance SQLite wrapper that uses Pydantic models as database schemas. Enjoy the power of SQLite's FTS5 engine and Django-like queries without writing complex SQL.
+NyanSQLite is a type-safe, high-performance SQLite wrapper that transforms Pydantic models directly into database schemas. Write minimal SQL while leveraging the power of FTS5 full-text search and Django-inspired query syntax.
 
 ### 🚀 Features
 
-- **Pydantic Schemas**: Type-safe data validation and automatic conversion.
-- **Django-like Query Syntax**: Intuitive filtering using `__gte`, `__contains`, etc.
-- **FTS5 Integration**: Built-in high-speed full-text search.
-- **Auto-Indexing**: Simplified B-tree index management via `Indexed` annotation.
-- **Advanced Data Handling**: Transparent support for `dict`, `list`, and `numpy.ndarray`.
-- **High Throughput**: Optimized for speed with WAL mode and bulk operations.
+| Feature | Benefit |
+|---------|---------|
+| **Pydantic Integration** | Type-safe validation and automatic JSON serialization |
+| **Django-like Queries** | `__gte`, `__in`, `__like` and more—no SQL needed |
+| **FTS5 Search** | Lightning-fast full-text search on `Searchable[str]` fields |
+| **Auto-Indexing** | Create B-tree indexes with `Indexed[T]` annotations |
+| **Complex Types** | Transparent handling of dict, list, and custom types |
+| **Performance Optimized** | WAL mode, batch inserts, parameterized queries |
+
+### 📦 Installation
+
+```bash
+pip install nyansqlite
+```
+
+Requires Python 3.9+ and Pydantic 2.0+.
+
+### ⚡ Quick Start
+
+```python
+from pydantic import BaseModel
+from nyansqlite import NyanSQLite, Indexed, Searchable
+
+class Post(BaseModel):
+    id: int
+    title: Searchable[str]
+    author: Indexed[str]
+    views: int = 0
+
+db = NyanSQLite(":memory:")
+db.register(Post)
+
+# Insert
+db.insert(Post(id=1, title="Hello SQLite", author="neko"))
+
+# Query
+posts = db.query(Post, author="neko", views__gte=0)
+
+# Full-text search
+results = db.search(Post, "SQLite")
+
+db.close()
+```
+
+### 📚 API Reference
+
+**Core Methods:**
+
+- `register(model)` – Introspect model and create table
+- `insert(obj)` – Insert a single record
+- `insert_many(objs)` – Bulk insert with transaction
+- `query(**kwargs)` – SELECT with filters, ordering, pagination
+- `search(query, limit)` – FTS5 full-text search
+- `get(**kwargs)` – Fetch one record or None
+- `update(where, **fields)` – Partial UPDATE
+- `delete(**kwargs)` – Conditional DELETE
+- `count(**kwargs)` – COUNT rows matching condition
+- `exists(**kwargs)` – Check if any row matches
+- `select(fields, **kwargs)` – Fetch specific columns as dicts
+- `vacuum()` – Optimize database file
+- `close()` – Close connection
+
+### 🔗 Resources
+
+- **Repository**: [github.com/disnana/nyansqlite](https://github.com/disnana/nyansqlite)
+- **Issues**: [Report bugs](https://github.com/disnana/nyansqlite/issues)
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License – see [LICENSE](LICENSE) for details.
