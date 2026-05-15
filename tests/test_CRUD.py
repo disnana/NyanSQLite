@@ -126,7 +126,7 @@ def test_search_and_rebuild(db):
         content: Searchable[str]
 
     db.register(Article)
-    
+
     articles = [
         Article(id=1, title="Python Guide", content="Learn Python basics"),
         Article(id=2, title="SQLite Tips", content="Advanced SQLite techniques"),
