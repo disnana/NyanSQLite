@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, TypeVar, Optional
+from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
 
@@ -52,12 +52,24 @@ def _build_where(kwargs: dict[str, Any]) -> tuple[str, list[Any]]:
         if "__" in key:
             field, op = key.rsplit("__", 1)
             q = f'"{field}"'
-            if   op == "ne":      clauses.append(f"{q} != ?");   values.append(value)
-            elif op == "gt":      clauses.append(f"{q} > ?");    values.append(value)
-            elif op == "gte":     clauses.append(f"{q} >= ?");   values.append(value)
-            elif op == "lt":      clauses.append(f"{q} < ?");    values.append(value)
-            elif op == "lte":     clauses.append(f"{q} <= ?");   values.append(value)
-            elif op == "like":    clauses.append(f"{q} LIKE ?"); values.append(value)
+            if op == "ne":
+                clauses.append(f"{q} != ?")
+                values.append(value)
+            elif op == "gt":
+                clauses.append(f"{q} > ?")
+                values.append(value)
+            elif op == "gte":
+                clauses.append(f"{q} >= ?")
+                values.append(value)
+            elif op == "lt":
+                clauses.append(f"{q} < ?")
+                values.append(value)
+            elif op == "lte":
+                clauses.append(f"{q} <= ?")
+                values.append(value)
+            elif op == "like":
+                clauses.append(f"{q} LIKE ?")
+                values.append(value)
             elif op == "in":
                 ph = ", ".join("?" * len(value))
                 clauses.append(f"{q} IN ({ph})")
@@ -83,8 +95,10 @@ def _order_sql(order_by: Optional[str], desc: bool) -> str:
 
 def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
     sql = ""
-    if limit  is not None: sql += f" LIMIT {int(limit)}"
-    if offset is not None: sql += f" OFFSET {int(offset)}"
+    if limit is not None:
+        sql += f" LIMIT {int(limit)}"
+    if offset is not None:
+        sql += f" OFFSET {int(offset)}"
     return sql
 
 
@@ -468,7 +482,7 @@ class NyanSQLite:
 
     # ── context manager + info ────────────────────────────────────────── #
 
-    def __enter__(self) -> "NyanSQLite":
+    def __enter__(self) -> NyanSQLite:
         return self
 
     def __exit__(self, *_: Any) -> None:

@@ -6,9 +6,9 @@ from datetime import date, datetime
 from typing import Any, Union, get_args, get_origin
 
 try:
-    from typing import Annotated, get_type_hints  # 3.9+
+    from typing import Annotated  # 3.9+
 except ImportError:  # pragma: no cover
-    from typing_extensions import Annotated, get_type_hints
+    from typing import Annotated
 
 from ._markers import _NyanIndexedMarker, _NyanSearchableMarker
 
@@ -54,7 +54,7 @@ def resolve_type(annotation: Any) -> tuple[Any, bool]:
 
 def _is_union_type(tp: Any) -> bool:
     import types
-    return isinstance(tp, types.UnionType)
+    return isinstance(tp, getattr(types, "UnionType", type(None)))
 
 
 # ── Python → SQLite type map ───────────────────────────────────────────── #

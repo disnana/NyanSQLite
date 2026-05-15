@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional, Tuple, List
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -12,7 +12,6 @@ except ImportError:  # pragma: no cover
 
 from ._markers import CompositeIndex
 from ._types import is_indexed, is_searchable, python_type_to_sqlite, resolve_type
-
 
 # ── helpers ────────────────────────────────────────────────────────────── #
 
@@ -97,7 +96,7 @@ def model_to_indexes(model: type[BaseModel]) -> list[str]:
 
 # ── FTS5 virtual table + sync triggers ────────────────────────────────── #
 
-def model_to_fts5(model: type[BaseModel]) -> Tuple[Optional[str], List[str]]:
+def model_to_fts5(model: type[BaseModel]) -> tuple[Optional[str], list[str]]:
     """Return ``(CREATE VIRTUAL TABLE stmt | None, [trigger stmts])``."""
     table  = model_to_table_name(model)
     hints  = model_hints(model)

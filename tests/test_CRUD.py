@@ -1,7 +1,10 @@
-import pytest
 from typing import Optional
+
+import pytest
 from pydantic import BaseModel
-from nyansqlite import NyanSQLite, Indexed
+
+from nyansqlite import Indexed, NyanSQLite
+
 
 class User(BaseModel):
     id: Optional[int] = None
@@ -25,11 +28,11 @@ def test_create_and_read(db):
     # Read all
     users = db.query(User)
     assert len(users) == 2
-    
+
     # Check Alice
     alice = next(u for u in users if u.name == 'Alice')
     assert alice.age == 30
-    
+
     # Check Bob
     bob = next(u for u in users if u.name == 'Bob')
     assert bob.age == 24
@@ -38,7 +41,7 @@ def test_create_and_read(db):
     user_by_name = db.query(User, name='Alice')
     assert len(user_by_name) == 1
     assert user_by_name[0].name == 'Alice'
-    
+
     # Get single
     user = db.get(User, id=1)
     assert user is not None
@@ -86,7 +89,7 @@ def test_complex_query(db):
     # age >= 30
     results = db.query(User, age__gte=30)
     assert len(results) == 2
-    
+
     # age < 30
     results = db.query(User, age__lt=30)
     assert len(results) == 1

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Any
+
 try:
     import apsw
 except ImportError:
     apsw = None
+
+try:
+    import sqlite3
+except ImportError:
+    sqlite3 = None
 
 
 class NyanConnection:
@@ -15,6 +22,7 @@ class NyanConnection:
     """
 
     _backend: str
+    _conn: Any
 
     def __init__(self, path: str, wal: bool = True):
         try:
@@ -44,7 +52,7 @@ class NyanConnection:
         if self._backend == "apsw":
             cur = self._conn.cursor()
             result = cur.execute(sql, params)
-            
+
             # APSW用の修正: description取得を安全に行う
             description = None
             try:
@@ -57,7 +65,7 @@ class NyanConnection:
                 cols = [d[0] for d in description]
                 return [dict(zip(cols, row)) for row in result]
             return []
-            
+
         else:
             # sqlite3 backend
             cur = self._conn.execute(sql, params)
