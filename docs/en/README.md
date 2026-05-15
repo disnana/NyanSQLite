@@ -17,8 +17,7 @@ A Pydantic-native SQLite wrapper that allows you to use Pydantic models directly
   - [Best Practices](guide/best_practices.md)
   - [Encryption](guide/encryption.md)
   - [Exceptions](guide/exceptions.md)
-- [API Reference](#api-reference)
-  - [NyanSQLite](api/NyanSQLite.md)
+- [API Reference](api.md)
 
 ---
 
