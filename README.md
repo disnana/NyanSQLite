@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/nyansqlite.svg)](https://pypi.org/project/nyansqlite/)
 [![Python versions](https://img.shields.io/pypi/pyversions/nyansqlite.svg)](https://pypi.org/project/nyansqlite/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/nyansqlite?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/nyansqlite)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/nyansqlite?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/nyansqlite)
 [![Tests](https://github.com/disnana/nyansqlite/actions/workflows/ci.yml/badge.svg)](https://github.com/disnana/nyansqlite/actions/workflows/ci.yml)
 
 **Pythonic SQLite with Pydantic models, Django-like queries, and FTS5 full-text search.**
