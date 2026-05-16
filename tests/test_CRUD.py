@@ -1,11 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import pytest
 from pydantic import BaseModel
-from conftest import randomname
-from concurrent.futures import ThreadPoolExecutor
 
-from nyansqlite import Indexed, NyanSQLite, Searchable
+from nyansqlite import Indexed, Searchable
+from conftest import randomname
 
 
 class User(BaseModel):

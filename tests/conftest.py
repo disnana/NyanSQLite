@@ -1,6 +1,7 @@
-import uuid
 import pytest
-import random, string
+import random
+import string
+import uuid
 from nyansqlite import NyanSQLite
 
 def randomname(n) -> str:
