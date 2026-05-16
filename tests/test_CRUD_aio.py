@@ -288,8 +288,8 @@ async def test_context_manager_close():
     from pathlib import Path
     db_path = Path("test_cm_aio.sqlite")
     # Ensure file is gone
-    if db_path.exists():
-        db_path.unlink()
+    if await asyncio.to_thread(db_path.exists):
+        await asyncio.to_thread(db_path.unlink)
 
     from nyansqlite import NyanSQLiteAIO
     async with NyanSQLiteAIO(str(db_path)) as db:
@@ -299,9 +299,9 @@ async def test_context_manager_close():
     # Check if we can still use it (it should fail)
     with pytest.raises(Exception):
         await db.count(User)
-    if db_path.exists():
+    if await asyncio.to_thread(db_path.exists):
         # Cleanup
         try:
-            db_path.unlink()
+            await asyncio.to_thread(db_path.unlink)
         except PermissionError:
             pass
