@@ -2,6 +2,8 @@ from typing import Optional
 
 import pytest
 from pydantic import BaseModel
+from conftest import randomname
+from concurrent.futures import ThreadPoolExecutor
 
 from nyansqlite import Indexed, NyanSQLite, Searchable
 
@@ -197,3 +199,34 @@ def test_search_and_rebuild(db):
     results = db.search(Article, "SQLite")
     assert len(results) == 1
     assert results[0].title == "SQLite Tips"
+
+
+def test_concurrent_inserts(db):
+    """大量のスレッドから同時に新規レコードを挿入しても、データの欠損やクラッシュが起きないか検証"""
+    num_threads = 20
+    total_inserts = 200
+
+    # スレッドごとに実行する挿入タスク
+    def insert_task(i):
+        # NyanSQLiteの仕様に合わせて、i をそのままユニークな数値IDとして使う
+        # name 側にランダム文字列を仕込む
+        unique_id = i + 1000  # 他のテストデータと被らないようにオフセット
+        unique_name = f"Name_{i}_{randomname(4)}"
+
+        # save ではなく insert を使用！
+        db.insert(User(id=unique_id, name=unique_name, age=20 + (i % 50)))
+        return unique_id
+
+    # 20個のスレッドで並行して200回の挿入を実行
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(insert_task, i) for i in range(total_inserts)]
+        inserted_ids = [f.result() for f in futures]
+
+    # 【検証1】すべてのスレッドが例外を出さずに正常終了したか
+    assert len(inserted_ids) == total_inserts
+
+    # 【検証2】保存したデータがすべてDBから正しく引けるか
+    for user_id in inserted_ids:
+        user = db.get(User, id=user_id)  # getの引数仕様も id=user_id に修正
+        assert user is not None
+        assert user.id == user_id
