@@ -215,7 +215,6 @@ async def test_search_and_rebuild(db):
 @pytest.mark.asyncio
 async def test_concurrent_inserts(db):
     """大量の非同期タスクから同時に新規レコードを挿入しても、データの欠損やクラッシュが起きないか検証"""
-    num_tasks = 20
     total_inserts = 200
 
     # 非同期タスクで実行する挿入タスク
@@ -250,7 +249,6 @@ async def test_atomic_transaction(db):
     async with db.atomic():
         await db.insert(User(id=100, name='Alice_Atomic', age=30))
         await db.insert(User(id=101, name='Bob_Atomic', age=30))
-    
     assert await db.count(User, age=30) == 2
 
     # Rollback on exception
@@ -260,7 +258,6 @@ async def test_atomic_transaction(db):
             raise ValueError("Intentional error")
     except ValueError:
         pass
-    
     assert not await db.exists(User, name='Rollback')
 
 @pytest.mark.asyncio
@@ -270,9 +267,7 @@ async def test_nested_atomic(db):
         await db.insert(User(id=200, name='Outer', age=50))
         async with db.atomic():
             await db.insert(User(id=201, name='Inner', age=50))
-        
         assert await db.count(User, age=50) == 2
-    
     assert await db.count(User, age=50) == 2
 
     # Nested rollback
@@ -290,25 +285,23 @@ async def test_nested_atomic(db):
 @pytest.mark.asyncio
 async def test_context_manager_close():
     """Test NyanSQLiteAIO as a context manager (automatic close)."""
-    db_path = "test_cm_aio.sqlite"
+    from pathlib import Path
+    db_path = Path("test_cm_aio.sqlite")
     # Ensure file is gone
-    import os
-    if os.path.exists(db_path):
-        os.remove(db_path)
-    
+    if db_path.exists():
+        db_path.unlink()
+
     from nyansqlite import NyanSQLiteAIO
-    async with NyanSQLiteAIO(db_path) as db:
+    async with NyanSQLiteAIO(str(db_path)) as db:
         await db.register(User)
         await db.insert(User(id=1, name='Alice', age=30))
-    
     # Connection should be closed here
     # Check if we can still use it (it should fail)
     with pytest.raises(Exception):
         await db.count(User)
-    
-    if os.path.exists(db_path):
+    if db_path.exists():
         # Cleanup
         try:
-            os.remove(db_path)
+            db_path.unlink()
         except PermissionError:
             pass

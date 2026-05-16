@@ -33,7 +33,7 @@ M = TypeVar("M", bound=BaseModel)
 
 _OP_PATTERN = re.compile(r"^\s*(\w+)\s*(>=|<=|!=|>|<|=)\s*(.*)$")
 
-def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Optional["_Meta"] = None) -> tuple[str, list[Any]]:
+def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Optional[_Meta] = None) -> tuple[str, list[Any]]:
     """パラメータ化されたWHERE句を文字列フィルタとキーワード引数から構築します。
 
     文字列フィルタ (args):

@@ -238,7 +238,6 @@ def test_atomic_transaction(db):
     with db.atomic():
         db.insert(User(id=100, name='Alice_Atomic', age=30))
         db.insert(User(id=101, name='Bob_Atomic', age=30))
-    
     assert db.count(User, age=30) == 2
 
     # Rollback on exception
@@ -248,7 +247,6 @@ def test_atomic_transaction(db):
             raise ValueError("Intentional error")
     except ValueError:
         pass
-    
     assert not db.exists(User, name='Rollback')
 
 def test_nested_atomic(db):
@@ -257,9 +255,7 @@ def test_nested_atomic(db):
         db.insert(User(id=200, name='Outer', age=50))
         with db.atomic():
             db.insert(User(id=201, name='Inner', age=50))
-        
         assert db.count(User, age=50) == 2
-    
     assert db.count(User, age=50) == 2
 
     # Nested rollback
@@ -281,17 +277,15 @@ def test_context_manager_close(base_db):
     import os
     if os.path.exists(db_path):
         os.remove(db_path)
-    
+
     from nyansqlite import NyanSQLite
     with NyanSQLite(db_path) as db:
         db.register(User)
         db.insert(User(id=1, name='Alice', age=30))
-    
     # Connection should be closed here
     # Check if we can still use it (it should fail)
     with pytest.raises(Exception):
         db.count(User)
-    
     if os.path.exists(db_path):
         # Cleanup
         try:

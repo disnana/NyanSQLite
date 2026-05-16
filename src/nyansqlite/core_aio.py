@@ -399,7 +399,7 @@ class NyanSQLiteAIO:
                 ph   = ", ".join("?" * len(chunk[0]))
                 sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
 
-                def _bulk_insert_chunk():
+                def _bulk_insert_chunk(sql=sql, chunk=chunk):
                     self._conn.execute("BEGIN TRANSACTION")
                     try:
                         self._conn.executemany(sql, [tuple(r.values()) for r in chunk])
@@ -551,7 +551,7 @@ class NyanSQLiteAIO:
             + _limit_sql(limit, offset)
         )
 
-        # Fetch all rows from DB then parse in parallel if possible, 
+        # Fetch all rows from DB then parse in parallel if possible,
         # but for now, move the loop into to_thread to keep it async-friendly.
         # To optimize "read", we could potentially parallelize _from_row for large datasets.
         def _fetch_and_parse():
@@ -800,12 +800,10 @@ class NyanSQLiteAIO:
         """
         async with self._lock_context():
             # Implementation: Start transaction, yield, then commit/rollback
-            # All must be done in to_thread to be safe with APSW/sqlite3
             in_tx_already = await asyncio.to_thread(self._conn.in_transaction)
-            
+
             if not in_tx_already:
                 await asyncio.to_thread(lambda: self._conn._raw("BEGIN"))
-            
             try:
                 yield
                 if not in_tx_already:
