@@ -11,13 +11,12 @@ class User(BaseModel):
     name: Indexed[str]
     age: int
 
+# このファイル内でのみ有効な db フィクスチャを定義
 @pytest.fixture
-def db(tmp_path):
-    db_path = tmp_path / "test.db"
-    db = NyanSQLite(str(db_path))
-    db.register(User)
-    yield db
-    db.close()
+def db(base_db):
+    """ベースのDBインスタンスにUserを登録して提供する"""
+    base_db.register(User)
+    return base_db
 
 def test_create_and_read(db):
     """Test creating a record and then reading it."""
