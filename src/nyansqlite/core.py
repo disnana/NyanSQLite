@@ -568,9 +568,8 @@ class NyanSQLite:
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
-        with self._lock: # 読み取り操作だが、現在の実装ではロックを使用
-            rows = self._conn.execute(sql, tuple(values))
-            return [self._from_row(model, meta, r) for r in rows]
+        rows = self._conn.execute(sql, tuple(values))
+        return [self._from_row(model, meta, r) for r in rows]
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -618,12 +617,11 @@ class NyanSQLite:
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
-        with self._lock: # 読み取り操作だが、現在の実装ではロックを使用
-            rows = self._conn.execute(sql, tuple(values))
-            return [
-                {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
-                for row in rows
-            ]
+        rows = self._conn.execute(sql, tuple(values))
+        return [
+            {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
+            for row in rows
+        ]
 
     # ── FTS5 SEARCH ───────────────────────────────────────────────────── #
 
@@ -672,9 +670,8 @@ class NyanSQLite:
             f'ORDER BY rank'
             + _limit_sql(limit, None)
         )
-        with self._lock: # 読み取り操作だが、現在の実装ではロックを使用
-            rows = self._conn.execute(sql, (query,))
-            return [self._from_row(model, meta, r) for r in rows]
+        rows = self._conn.execute(sql, (query,))
+        return [self._from_row(model, meta, r) for r in rows]
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
@@ -697,9 +694,8 @@ class NyanSQLite:
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
-        with self._lock: # 読み取り操作だが、現在の実装ではロックを使用
-            rows = self._conn.execute(sql, tuple(values))
-            return rows[0]["n"] if rows else 0
+        rows = self._conn.execute(sql, tuple(values))
+        return rows[0]["n"] if rows else 0
 
     def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
         """フィルタ条件に一致する行が少なくとも1つ存在するかどうかを返します。
@@ -719,8 +715,8 @@ class NyanSQLite:
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
-        with self._lock: # 読み取り操作だが、現在の実装ではロックを使用
-            return bool(self._conn.execute(sql, tuple(values)))
+        rows = self._conn.execute(sql, tuple(values))
+        return bool(rows)
 
     # ── MAINTENANCE ───────────────────────────────────────────────────── #
 

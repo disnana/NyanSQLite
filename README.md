@@ -210,16 +210,28 @@ class User(BaseModel):
     name: Indexed[str]
 
 async def main():
-    # 非同期コンテキストマネージャ
+    # 1. 非同期コンテキストマネージャによる接続
     async with NyanSQLiteAIO("async.db") as db:
+        # 2. モデルの登録（初回のみテーブル作成）
         db.register(User)
         
-        # 非同期挿入
+        # 3. 非同期挿入
+        # 内部でスレッドセーフに実行されます
         await db.insert(User(id=1, name="alice"))
         
-        # 非同期クエリ
+        # 4. 非同期クエリ
+        # Django風のクエリも非同期で利用可能
         users = await db.query(User, name="alice")
-        print(users[0].name)
+        print(f"Found: {users[0].name}")
+
+        # 5. 一括挿入も非同期
+        await db.insert_many([
+            User(id=i, name=f"user_{i}") for i in range(2, 5)
+        ])
+        
+        # 6. その他のメソッドも await が必要です
+        count = await db.count(User)
+        print(f"Total users: {count}")
 
 asyncio.run(main())
 ```
@@ -500,16 +512,27 @@ class User(BaseModel):
     name: Indexed[str]
 
 async def main():
-    # Async context manager
+    # 1. Connection via async context manager
     async with NyanSQLiteAIO("async.db") as db:
+        # 2. Register models
         db.register(User)
         
-        # Async insert
+        # 3. Async Insert
         await db.insert(User(id=1, name="alice"))
         
-        # Async query
+        # 4. Async Query
+        # Django-like queries are fully supported
         users = await db.query(User, name="alice")
-        print(users[0].name)
+        print(f"Found: {users[0].name}")
+
+        # 5. Bulk insert
+        await db.insert_many([
+            User(id=i, name=f"user_{i}") for i in range(2, 5)
+        ])
+        
+        # 6. All read/write operations must be awaited
+        exists = await db.exists(User, name="user_2")
+        print(f"User 2 exists: {exists}")
 
 asyncio.run(main())
 ```

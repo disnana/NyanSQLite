@@ -12,6 +12,7 @@ outline: [2, 3]
 
 ### 🔄 変更
 - `NyanSQLiteAIO` の `query`, `select`, `search` メソッドの内部最適化。
+- 同期版 `NyanSQLite` クラスにおいて、読み取り操作のロック保持時間を最小化。
 
 ---
 

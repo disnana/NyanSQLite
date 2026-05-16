@@ -13,6 +13,7 @@ outline: [2, 3]
 
 ### 🔄 Changed
 - Internal optimization for `query`, `select`, and `search` methods in `NyanSQLiteAIO`.
+- Optimized read operations in synchronous `NyanSQLite` class by minimizing lock duration.
 
 ---
 

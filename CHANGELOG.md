@@ -9,6 +9,7 @@
 
 ### 🔄 Changed
 - Internal optimization for `query`, `select`, and `search` methods in `NyanSQLiteAIO`.
+- Optimized read operations in synchronous `NyanSQLite` class by minimizing lock duration.
 
 ---
 
@@ -47,6 +48,7 @@
 
 ### 🔄 変更
 - `NyanSQLiteAIO` の `query`, `select`, `search` メソッドの内部最適化。
+- 同期版 `NyanSQLite` クラスにおいて、読み取り操作のロック保持時間を最小化。
 
 ---
 
