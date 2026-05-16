@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 from typing import Optional
 
 import pytest
@@ -303,5 +304,5 @@ async def test_context_manager_close():
         # Cleanup
         try:
             await asyncio.to_thread(db_path.unlink)
-        except PermissionError:
-            pass
+        except PermissionError as exc:
+            warnings.warn(f"Cleanup skipped: could not remove {db_path}: {exc!r}")
