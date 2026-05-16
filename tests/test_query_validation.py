@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from nyansqlite import NyanSQLite, NyanSQLiteAIO
 from nyansqlite.exceptions import FieldNotFoundError, QueryValidationError
 
+
 class User(BaseModel):
     id: int
     name: str
