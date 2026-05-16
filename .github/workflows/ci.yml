@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - '**' # すべてのブランチへのプッシュでトリガー
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
@@ -50,8 +50,18 @@ jobs:
           exit 0
         fi
 
-        # For PRs: check changed files
-        BASE="${{ github.event.pull_request.base.sha }}"
+        # For PRs and other branch pushes: check changed files
+        # For push events on non-main branches, we need to compare against the default branch (usually main)
+        # For PRs, github.event.pull_request.base.sha is available
+        if [ "${{ github.event_name }}" == "push" ]; then
+          BASE_REF="${{ github.base_ref || 'main' }}" # For push, base_ref might be empty, default to main
+          echo "Comparing against base ref: $BASE_REF"
+          git fetch origin "$BASE_REF" --depth=1
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+        else # pull_request event
+          BASE="${{ github.event.pull_request.base.sha }}"
+        fi
+
         HEAD="${{ github.sha }}"
         CHANGED=$(git diff --name-only "$BASE" "$HEAD")
         echo "Changed files:"
@@ -368,9 +378,6 @@ jobs:
         python-version: ${{ env.DEFAULT_PYTHON_VERSION }}
 
     - name: Install build tools
-      run: uv pip install --system build
-
-    - name: Build package
       run: python -m build
 
     - name: Generate hashes
