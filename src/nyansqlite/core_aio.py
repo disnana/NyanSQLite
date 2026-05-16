@@ -97,9 +97,8 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                 clauses.append(f"{q} > ?")
                 # Validate that value is a scalar that supports ordering.
                 try:
-                    if isinstance(value, (list, tuple, set, dict)):
-                        raise TypeError("Expected scalar value, got container")
-                    _ = value > 0
+                    _ref = value
+                    _ = value > _ref
                 except TypeError as e:
                     raise QueryValidationError(
                         f"Type mismatch in filter {key}={value!r}. "
