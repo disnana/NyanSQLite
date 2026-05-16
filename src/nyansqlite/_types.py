@@ -123,7 +123,7 @@ def serialize_value(value: Any, annotation: Any) -> Any:
     """Convert a Python value to a SQLite-storable scalar."""
     if value is None:
         return None
-    
+
     # 頻出する基本型を型チェックで先に処理し、resolve_type を回避する
     if isinstance(value, str):
         return value
