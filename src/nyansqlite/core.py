@@ -95,7 +95,8 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                 clauses.append(f"{q} > ?")
                 # Validate that value can be compared
                 try:
-                    _ = value > value  # Simple type check
+                    _ref = value
+                    _ = value > _ref  # Simple type check
                 except TypeError as e:
                     raise QueryValidationError(
                         f"Type mismatch in filter {key}={value!r}. "
