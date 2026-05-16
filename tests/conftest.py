@@ -1,7 +1,9 @@
-import pytest
 import random
 import string
 import uuid
+
+import pytest
+
 from nyansqlite import NyanSQLite
 
 def randomname(n) -> str:
