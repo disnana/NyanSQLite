@@ -27,6 +27,3 @@ class QueryValidationError(NyanSQLiteError):
     通常、クライアント側での不正な入力パラメータ（例: age__gt='not_a_number'）が原因です。
     アプリケーションは これを400 Bad Request として処理すべきです。"""
     pass
-
-
-
