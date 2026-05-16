@@ -56,8 +56,12 @@ jobs:
         if [ "${{ github.event_name }}" == "push" ]; then
           BASE_REF="${{ github.base_ref || 'main' }}" # For push, base_ref might be empty, default to main
           echo "Comparing against base ref: $BASE_REF"
-          git fetch origin "$BASE_REF" --depth=1
-          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+          git fetch origin "$BASE_REF" --quiet
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD || echo "")
+          if [ -z "$BASE" ]; then
+            echo "Warning: No common ancestor found with $BASE_REF. Falling back to simple diff."
+            BASE="origin/$BASE_REF"
+          fi
         else # pull_request event
           BASE="${{ github.event.pull_request.base.sha }}"
         fi
