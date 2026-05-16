@@ -108,12 +108,39 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                 values.append(value)
             elif op == "gte":
                 clauses.append(f"{q} >= ?")
+                try:
+                    _ref = value
+                    _ = value >= _ref
+                except TypeError as e:
+                    raise QueryValidationError(
+                        f"Type mismatch in filter {key}={value!r}. "
+                        f"Cannot apply '>=' operator to {type(value).__name__}. "
+                        f"Error: {e}"
+                    ) from e
                 values.append(value)
             elif op == "lt":
                 clauses.append(f"{q} < ?")
+                try:
+                    _ref = value
+                    _ = value < _ref
+                except TypeError as e:
+                    raise QueryValidationError(
+                        f"Type mismatch in filter {key}={value!r}. "
+                        f"Cannot apply '<' operator to {type(value).__name__}. "
+                        f"Error: {e}"
+                    ) from e
                 values.append(value)
             elif op == "lte":
                 clauses.append(f"{q} <= ?")
+                try:
+                    _ref = value
+                    _ = value <= _ref
+                except TypeError as e:
+                    raise QueryValidationError(
+                        f"Type mismatch in filter {key}={value!r}. "
+                        f"Cannot apply '<=' operator to {type(value).__name__}. "
+                        f"Error: {e}"
+                    ) from e
                 values.append(value)
             elif op == "like":
                 clauses.append(f"{q} LIKE ?")
