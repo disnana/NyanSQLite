@@ -378,6 +378,9 @@ jobs:
         python-version: ${{ env.DEFAULT_PYTHON_VERSION }}
 
     - name: Install build tools
+      run: python -m pip install --upgrade build
+
+    - name: Build Package
       run: python -m build
 
     - name: Generate hashes
