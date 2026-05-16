@@ -6,6 +6,7 @@ import pytest
 
 from nyansqlite import NyanSQLite
 
+
 def randomname(n) -> str:
     """
     Generate a random string of ASCII letters and digits.

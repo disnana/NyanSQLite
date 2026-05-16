@@ -4,8 +4,8 @@ from typing import Optional
 import pytest
 from pydantic import BaseModel
 
-from nyansqlite import Indexed, Searchable
 from conftest import randomname
+from nyansqlite import Indexed, Searchable
 
 
 class User(BaseModel):
