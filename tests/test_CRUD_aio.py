@@ -241,3 +241,74 @@ async def test_concurrent_inserts(db):
         user = await db.get(User, id=user_id)  # getの引数仕様も id=user_id に修正
         assert user is not None
         assert user.id == user_id
+
+
+@pytest.mark.asyncio
+async def test_atomic_transaction(db):
+    """Test db.atomic() context manager."""
+    # Successful commit
+    async with db.atomic():
+        await db.insert(User(id=100, name='Alice_Atomic', age=30))
+        await db.insert(User(id=101, name='Bob_Atomic', age=30))
+    
+    assert await db.count(User, age=30) == 2
+
+    # Rollback on exception
+    try:
+        async with db.atomic():
+            await db.insert(User(id=102, name='Rollback', age=40))
+            raise ValueError("Intentional error")
+    except ValueError:
+        pass
+    
+    assert not await db.exists(User, name='Rollback')
+
+@pytest.mark.asyncio
+async def test_nested_atomic(db):
+    """Test nested db.atomic() calls."""
+    async with db.atomic():
+        await db.insert(User(id=200, name='Outer', age=50))
+        async with db.atomic():
+            await db.insert(User(id=201, name='Inner', age=50))
+        
+        assert await db.count(User, age=50) == 2
+    
+    assert await db.count(User, age=50) == 2
+
+    # Nested rollback
+    try:
+        async with db.atomic():
+            await db.insert(User(id=202, name='Outer_Fail', age=60))
+            async with db.atomic():
+                await db.insert(User(id=203, name='Inner_Fail', age=60))
+                raise ValueError("Nested error")
+    except ValueError:
+        pass
+
+    assert await db.count(User, age=60) == 0
+
+@pytest.mark.asyncio
+async def test_context_manager_close():
+    """Test NyanSQLiteAIO as a context manager (automatic close)."""
+    db_path = "test_cm_aio.sqlite"
+    # Ensure file is gone
+    import os
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    
+    from nyansqlite import NyanSQLiteAIO
+    async with NyanSQLiteAIO(db_path) as db:
+        await db.register(User)
+        await db.insert(User(id=1, name='Alice', age=30))
+    
+    # Connection should be closed here
+    # Check if we can still use it (it should fail)
+    with pytest.raises(Exception):
+        await db.count(User)
+    
+    if os.path.exists(db_path):
+        # Cleanup
+        try:
+            os.remove(db_path)
+        except PermissionError:
+            pass

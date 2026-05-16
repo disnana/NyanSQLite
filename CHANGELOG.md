@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [1.1.1] - 2026-05-16
+
+### 🚀 Added
+- **Explicit Transactions**: Added `atomic()` context manager to `NyanSQLite` and `async with atomic()` to `NyanSQLiteAIO` for manual transaction control.
+- **Nested Transactions**: Added support for nested `atomic()` blocks.
+
+### 🔄 Changed
+- **Thread Safety**: Improved thread safety by switching to `threading.RLock` in `NyanSQLite`.
+- **Async Safety**: Implemented re-entrant async lock in `NyanSQLiteAIO` to prevent deadlocks when using `atomic()`.
+
+---
+
 ## [1.1.0] - 2026-05-16
 
 ### 🚀 Added
@@ -38,6 +50,18 @@
 ---
 
 # 更新履歴
+
+## [1.1.1] - 2026-05-16
+
+### 🚀 追加
+- **明示的トランザクション**: 手動でトランザクションを制御するための `atomic()` コンテキストマネージャを `NyanSQLite` に、`async with atomic()` を `NyanSQLiteAIO` に追加しました。
+- **入れ子構造のトランザクション**: ネスト（入れ子）された `atomic()` ブロックのサポートを追加しました。
+
+### 🔄 変更
+- **スレッドセーフ**: `NyanSQLite` で `threading.RLock` を使用するように変更し、スレッド安全性を向上させました。
+- **非同期安全性**: `NyanSQLiteAIO` において、`atomic()` 使用時のデッドロックを防ぐためにリエントラントな非同期ロックを実装しました。
+
+---
 
 ## [1.1.0] - 2026-05-16
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
@@ -212,7 +214,25 @@ class NyanSQLiteAIO:
         self._conn     = NyanConnection(path, wal=wal)
         self._registry: dict[type[BaseModel], _Meta] = {}
         self._write_lock = asyncio.Lock() # 書き込み専用ロック
+        self._lock_owner = None           # ロックを保持しているタスク
         self._strict_deserialization = strict_deserialization
+
+    @asynccontextmanager
+    async def _lock_context(self):
+        """リエントラント（再入可能）な非同期ロック。
+        Re-entrant async lock.
+        """
+        current_task = asyncio.current_task()
+        if self._lock_owner == current_task:
+            yield
+            return
+
+        async with self._write_lock:
+            self._lock_owner = current_task
+            try:
+                yield
+            finally:
+                self._lock_owner = None
 
     # ── registration ─────────────────────────────────────────────────── #
 
@@ -243,7 +263,7 @@ class NyanSQLiteAIO:
                     f"Use explicit __tablename__ override or rename one of the models."
                 )
 
-        async with self._write_lock: # Use write lock for registration
+        async with self._lock_context(): # Use write lock for registration
             await asyncio.to_thread(
                 lambda: (
                     self._conn.execute(model_to_ddl(model)),
@@ -333,7 +353,7 @@ class NyanSQLiteAIO:
         ph   = ", ".join("?" * len(row))
         sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
 
-        async with self._write_lock: # Use write lock
+        async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
                 lambda: (
                     self._conn.execute(sql, tuple(row.values())),
@@ -370,7 +390,7 @@ class NyanSQLiteAIO:
         total_inserted = 0
         cols = ", ".join(f'"{k}"' for k in rows[0])
 
-        async with self._write_lock: # Use write lock for the entire bulk operation
+        async with self._lock_context(): # Use write lock for the entire bulk operation
             for chunk_start in range(0, len(rows), chunk_size):
                 chunk = rows[chunk_start:chunk_start + chunk_size]
                 if not chunk:
@@ -431,7 +451,7 @@ class NyanSQLiteAIO:
         where_clause, where_vals = _build_where((), where)
         sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'
 
-        async with self._write_lock: # Use write lock
+        async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
                 lambda: self._conn.execute(sql, tuple(set_vals + where_vals))
             )
@@ -459,7 +479,7 @@ class NyanSQLiteAIO:
         where_clause, values = _build_where(filters, kwargs)
         sql = f'DELETE FROM "{meta.table}" {where_clause}'
 
-        async with self._write_lock: # Use write lock
+        async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
                 lambda: self._conn.execute(sql, tuple(values))
             )
@@ -720,7 +740,7 @@ class NyanSQLiteAIO:
         if not meta.fts_table:
             return
 
-        async with self._write_lock: # Use write lock
+        async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
                 lambda: self._conn.execute(
                     f'INSERT INTO "{meta.fts_table}"("{meta.fts_table}") VALUES(\'rebuild\')'
@@ -764,6 +784,36 @@ class NyanSQLiteAIO:
         # and this is a generic raw execute, I will leave it unlocked for now,
         # but this is a potential area for refinement if write safety is paramount for raw SQL.
         return await asyncio.to_thread(lambda: self._conn.execute(sql, params))
+
+    @asynccontextmanager
+    async def atomic(self) -> AsyncGenerator[None, None]:
+        """非同期トランザクション（ATOMICブロック）を開始します。
+        ネスト（入れ子）された呼び出しも安全に処理されます。
+
+        Async transaction (ATOMIC block).
+        Nested calls are handled safely.
+
+        Example:
+            >>> async with db.atomic():
+            >>>     await db.insert(User(id=1, name="Taro"))
+            >>>     # Raise error to rollback
+        """
+        async with self._lock_context():
+            # Implementation: Start transaction, yield, then commit/rollback
+            # All must be done in to_thread to be safe with APSW/sqlite3
+            in_tx_already = await asyncio.to_thread(self._conn.in_transaction)
+            
+            if not in_tx_already:
+                await asyncio.to_thread(lambda: self._conn._raw("BEGIN"))
+            
+            try:
+                yield
+                if not in_tx_already:
+                    await asyncio.to_thread(lambda: self._conn._raw("COMMIT"))
+            except Exception:
+                if not in_tx_already:
+                    await asyncio.to_thread(lambda: self._conn._raw("ROLLBACK"))
+                raise
 
     # ── context manager + info ────────────────────────────────────────── #
 

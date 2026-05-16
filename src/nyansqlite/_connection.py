@@ -86,8 +86,18 @@ class NyanConnection:
 
     # ── transaction ──────────────────────────────────────────────────── #
 
+    def in_transaction(self) -> bool:
+        """Whether the connection is currently in a transaction."""
+        if self._backend == "sqlite3":
+            return self._conn.in_transaction
+        return self._conn.getautocommit() is False
+
     @contextmanager
     def transaction(self) -> Generator[None, None, None]:
+        if self.in_transaction():
+            yield
+            return
+
         self._raw("BEGIN")
         try:
             yield

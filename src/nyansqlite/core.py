@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
@@ -278,7 +280,7 @@ class NyanSQLite:
         """
         self._conn     = NyanConnection(path, wal=wal)
         self._registry: dict[type[BaseModel], _Meta] = {}
-        self._lock     = threading.Lock()
+        self._lock     = threading.RLock()
         self._strict_deserialization = strict_deserialization
 
     # ── registration ─────────────────────────────────────────────────── #
@@ -756,6 +758,20 @@ class NyanSQLite:
         # execute_rawは読み取り/書き込み両方ありうるためロックを維持
         with self._lock:
             return self._conn.execute(sql, params)
+
+    @contextmanager
+    def atomic(self) -> Generator[None, None, None]:
+        """トランザクション（ATOMICブロック）を開始します。
+        ネスト（入れ子）された呼び出しも安全に処理されます。
+
+        Example:
+            >>> with db.atomic():
+            >>>     db.insert(User(id=1, name="Taro"))
+            >>>     # ここで例外が発生するとロールバックされます
+        """
+        with self._lock:
+            with self._conn.transaction():
+                yield
 
     # ── context manager + info ────────────────────────────────────────── #
 
