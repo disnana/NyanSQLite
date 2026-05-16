@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from nyansqlite import NyanSQLite
+from nyansqlite.core_aio import NyanSQLiteAIO
 
 
 def randomname(n) -> str:
@@ -60,3 +61,33 @@ def base_db(tmp_path):
     db = NyanSQLite(str(db_path))
     yield db
     db.close()
+
+
+@pytest.fixture
+async def base_db_aio(tmp_path):
+    """
+    Create a temporary NyanSQLiteAIO database for async testing.
+
+    This fixture provides an isolated async database instance for each test using a temporary
+    directory. The database file is created with a unique 8-character UUID-based name
+    to minimize collision probability. The database is automatically closed after the
+    test completes.
+
+    Args:
+        tmp_path (pathlib.Path): Pytest's built-in temporary directory path fixture.
+
+    Yields:
+        NyanSQLiteAIO: A connected async database instance ready for testing.
+    """
+    # 8文字のUUIDを使用
+    file_name = f"{uuid.uuid4().hex[:8]}.db"
+    db_path = tmp_path / file_name
+
+    # 万が一のための衝突判定
+    while db_path.exists():
+        file_name = f"{uuid.uuid4().hex[:8]}.db"
+        db_path = tmp_path / file_name
+
+    db = NyanSQLiteAIO(str(db_path))
+    yield db
+    await db.close()
