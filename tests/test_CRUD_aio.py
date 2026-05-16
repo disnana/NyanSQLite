@@ -305,4 +305,4 @@ async def test_context_manager_close():
         try:
             await asyncio.to_thread(db_path.unlink)
         except PermissionError as exc:
-            warnings.warn(f"Cleanup skipped: could not remove {db_path}: {exc!r}")
+            warnings.warn(f"Cleanup skipped: could not remove {db_path}: {exc!r}", stacklevel=2)
