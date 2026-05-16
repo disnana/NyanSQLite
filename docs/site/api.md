@@ -14,6 +14,19 @@ class NyanSQLite(path: str = ':memory:', wal: bool = True, strict_deserializatio
 
 PydanticネイティブなSQLiteラッパー。
 
+## NyanSQLiteAIO
+
+```python
+class NyanSQLiteAIO(path: str = ':memory:', wal: bool = True, strict_deserialization: bool = False)
+```
+
+`NyanSQLite` の非同期版。 `asyncio` を使用したノンブロッキングなデータベース操作を提供します。
+
+内部で `asyncio.to_thread` を使用し、スレッドセーフなアクセスを維持しつつ、イベントループをブロックしません。
+メソッドのほとんどが `async` で定義されており、呼び出し時に `await` が必要です。
+
+基本的な機能は `NyanSQLite` と共通です。詳細は [非同期サポート](./async) を参照してください。
+
     自動的なスキーマ作成、B-treeインデックス、FTS5全文検索、
     部分的な読み書き、および高度なクエリ演算子をサポートします。
     バックエンドには高速な `apsw` を使用しています。
