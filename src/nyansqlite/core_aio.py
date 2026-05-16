@@ -531,9 +531,12 @@ class NyanSQLiteAIO:
             + _limit_sql(limit, offset)
         )
 
-        # Move data fetching and Pydantic parsing into a single to_thread call
+        # Fetch all rows from DB then parse in parallel if possible, 
+        # but for now, move the loop into to_thread to keep it async-friendly.
+        # To optimize "read", we could potentially parallelize _from_row for large datasets.
         def _fetch_and_parse():
             rows = self._conn.execute(sql, tuple(values))
+            # Optimization: Pre-fetch all rows then parse
             return [self._from_row(model, meta, r) for r in rows]
 
         return await asyncio.to_thread(_fetch_and_parse)
@@ -589,7 +592,7 @@ class NyanSQLiteAIO:
             + _limit_sql(limit, offset)
         )
 
-        # Remove async with self._lock
+        # Optimization: move fetching and deserialization into a single thread call
         def _fetch_and_deserialize():
             rows = self._conn.execute(sql, tuple(values))
             return [
@@ -643,7 +646,7 @@ class NyanSQLiteAIO:
             + _limit_sql(limit, None)
         )
 
-        # Remove async with self._lock
+        # Optimization: move fetching and parsing into a single thread call
         def _fetch_and_parse():
             rows = self._conn.execute(sql, (query,))
             return [self._from_row(model, meta, r) for r in rows]

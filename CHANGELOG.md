@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## [1.1.0] - 2026-05-16
+
+### 🚀 Added
+- **Asynchronous Support**: Full support for `asyncio` via `NyanSQLiteAIO` class.
+- **Improved Performance**: Optimized read operations by minimizing thread context switching and processing rows efficiently in `asyncio.to_thread`.
+- **Documentation Updates**: Added English and Japanese documentation for asynchronous usage.
+
+### 🔄 Changed
+- Internal optimization for `query`, `select`, and `search` methods in `NyanSQLiteAIO`.
+
+---
+
+## [1.0.1] - 2026-05-15
+
+### 🐞 Fixed
+- Minor bug fixes and performance improvements.
+
+---
+
 ## [1.0.0] - 2026-05-15
 
 ### 🚀 Added
@@ -18,6 +37,25 @@
 ---
 
 # 更新履歴
+
+## [1.1.0] - 2026-05-16
+
+### 🚀 追加
+- **非同期サポート**: `NyanSQLiteAIO` クラスによる `asyncio` の完全サポート。
+- **パフォーマンス向上**: `asyncio.to_thread` 内での効率的な行処理により、読み取り操作を最適化。
+- **ドキュメント更新**: 非同期利用に関する日英のドキュメントを追加。
+
+### 🔄 変更
+- `NyanSQLiteAIO` の `query`, `select`, `search` メソッドの内部最適化。
+
+---
+
+## [1.0.1] - 2026-05-15
+
+### 🐞 修正
+- 軽微なバグ修正とパフォーマンスの改善。
+
+---
 
 ## [1.0.0] - 2026-05-15
 

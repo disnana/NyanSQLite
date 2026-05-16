@@ -196,6 +196,34 @@ for t in threads: t.start()
 for t in threads: t.join()
 ```
 
+#### 非同期サポート (`asyncio`)
+
+`NyanSQLiteAIO` クラスを使用することで、非同期プログラミング（`asyncio`）を完全にサポートします。内部的には `asyncio.to_thread` を活用し、DB操作をスレッドセーフかつノンブロッキングに実行します。
+
+```python
+import asyncio
+from nyansqlite import NyanSQLiteAIO, Indexed
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: Indexed[str]
+
+async def main():
+    # 非同期コンテキストマネージャ
+    async with NyanSQLiteAIO("async.db") as db:
+        db.register(User)
+        
+        # 非同期挿入
+        await db.insert(User(id=1, name="alice"))
+        
+        # 非同期クエリ
+        users = await db.query(User, name="alice")
+        print(users[0].name)
+
+asyncio.run(main())
+```
+
 #### 破損データの安全な処理（`strict_deserialization`）
 
 DB内に不正なJSONや日付フォーマットが混入した場合、2つのモードから選択できます：
@@ -456,6 +484,34 @@ def worker():
 threads = [threading.Thread(target=worker) for _ in range(10)]
 for t in threads: t.start()
 for t in threads: t.join()
+```
+
+#### Asynchronous Support (`asyncio`)
+
+NyanSQLite provides full support for `asyncio` via the `NyanSQLiteAIO` class. It uses `asyncio.to_thread` internally to keep operations non-blocking and thread-safe.
+
+```python
+import asyncio
+from nyansqlite import NyanSQLiteAIO, Indexed
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: Indexed[str]
+
+async def main():
+    # Async context manager
+    async with NyanSQLiteAIO("async.db") as db:
+        db.register(User)
+        
+        # Async insert
+        await db.insert(User(id=1, name="alice"))
+        
+        # Async query
+        users = await db.query(User, name="alice")
+        print(users[0].name)
+
+asyncio.run(main())
 ```
 
 #### Graceful Data Corruption Handling with `strict_deserialization`
