@@ -344,8 +344,14 @@ class NyanSQLite:
 
     def _to_row(self, obj: BaseModel, meta: _Meta) -> dict[str, Any]:
         """Pydanticモデル → SQLite用のシリアライズされた辞書。"""
-        dump = obj.model_dump() if hasattr(obj, "model_dump") else obj.dict()
-        return {k: serialize_value(v, meta.hints[k]) for k, v in dump.items() if k in meta.hints}
+        # Pydantic v2 if available
+        if hasattr(obj, "model_dump"):
+            dump = obj.model_dump()
+        else:
+            dump = obj.dict()
+
+        hints = meta.hints
+        return {k: serialize_value(v, hints[k]) for k, v in dump.items() if k in hints}
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
         """SQLiteの行辞書 → Pydanticモデル。
@@ -413,29 +419,32 @@ class NyanSQLite:
         if not objs:
             return 0
         meta = self._meta(type(objs[0]))
+        hints = meta.hints
+        fields = list(hints.keys())
 
-        # SQLiteのパラメータのデフォルト制限は32766
-        # 安全のため、ステートメントごとに1000パラメータを使用
-        # (列数 * チャンクごとの行数 <= 1000)
-        rows = [self._to_row(o, meta) for o in objs]
-        cols_count = len(rows[0])
+        # Pydantic v2 の高速な属性アクセスを利用
+        # model_dump() を介さず、serialize_value もインライン化に近い形で呼び出す
+        rows = []
+        for o in objs:
+            row_tuple = tuple(serialize_value(getattr(o, f), hints[f]) for f in fields)
+            rows.append(row_tuple)
+
+        cols_count = len(fields)
         params_limit = 32000  # 控えめな制限
         chunk_size = max(1, params_limit // cols_count)
 
         total_inserted = 0
-        cols = ", ".join(f'"{k}"' for k in rows[0])
+        meta_table = meta.table
+        cols = ", ".join(f'"{k}"' for k in fields)
+        ph = ", ".join("?" for _ in range(cols_count))
+        sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'
 
-        for chunk_start in range(0, len(rows), chunk_size):
-            chunk = rows[chunk_start:chunk_start + chunk_size]
-            if not chunk:
-                continue
-
-            ph   = ", ".join("?" * len(chunk[0]))
-            sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
-            with self._lock:
-                with self._conn.transaction():
-                    self._conn.executemany(sql, [tuple(r.values()) for r in chunk])
-            total_inserted += len(chunk)
+        with self._lock:
+            with self._conn.transaction():
+                for chunk_start in range(0, len(rows), chunk_size):
+                    chunk = rows[chunk_start:chunk_start + chunk_size]
+                    self._conn.executemany(sql, chunk)
+                    total_inserted += len(chunk)
 
         return total_inserted
 

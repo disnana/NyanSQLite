@@ -331,8 +331,13 @@ class NyanSQLiteAIO:
 
     def _to_row(self, obj: BaseModel, meta: _Meta) -> dict[str, Any]:
         """Pydantic model → serialised dict for SQLite."""
-        dump = obj.model_dump() if hasattr(obj, "model_dump") else obj.dict()
-        return {k: serialize_value(v, meta.hints[k]) for k, v in dump.items() if k in meta.hints}
+        if hasattr(obj, "model_dump"):
+            dump = obj.model_dump()
+        else:
+            dump = obj.dict()
+
+        hints = meta.hints
+        return {k: serialize_value(v, hints[k]) for k, v in dump.items() if k in hints}
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
         """SQLite row dict → Pydantic model.
@@ -408,36 +413,39 @@ class NyanSQLiteAIO:
         if not objs:
             return 0
         meta = self._meta(type(objs[0]))
+        hints = meta.hints
+        fields = list(hints.keys())
 
         # SQLite default limit on parameters is 32766
-        rows = [self._to_row(o, meta) for o in objs]
-        cols_count = len(rows[0])
+        rows = []
+        for o in objs:
+            row_tuple = tuple(serialize_value(getattr(o, f), hints[f]) for f in fields)
+            rows.append(row_tuple)
+
+        cols_count = len(fields)
         params_limit = 32000  # Conservative limit
         chunk_size = max(1, params_limit // cols_count)
 
         total_inserted = 0
-        cols = ", ".join(f'"{k}"' for k in rows[0])
+        meta_table = meta.table
+        cols = ", ".join(f'"{k}"' for k in fields)
+        ph = ", ".join("?" for _ in range(cols_count))
+        sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'
 
         async with self._lock_context(): # Use write lock for the entire bulk operation
-            for chunk_start in range(0, len(rows), chunk_size):
-                chunk = rows[chunk_start:chunk_start + chunk_size]
-                if not chunk:
-                    continue
+            def _bulk_insert_all():
+                self._conn.execute("BEGIN TRANSACTION")
+                try:
+                    for chunk_start in range(0, len(rows), chunk_size):
+                        chunk = rows[chunk_start:chunk_start + chunk_size]
+                        self._conn.executemany(sql, chunk)
+                    self._conn.execute("COMMIT")
+                except Exception:
+                    self._conn.execute("ROLLBACK")
+                    raise
 
-                ph   = ", ".join("?" * len(chunk[0]))
-                sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
-
-                def _bulk_insert_chunk(sql=sql, chunk=chunk):
-                    self._conn.execute("BEGIN TRANSACTION")
-                    try:
-                        self._conn.executemany(sql, [tuple(r.values()) for r in chunk])
-                        self._conn.execute("COMMIT")
-                    except Exception:
-                        self._conn.execute("ROLLBACK")
-                        raise
-
-                await asyncio.to_thread(_bulk_insert_chunk)
-                total_inserted += len(chunk)
+            await asyncio.to_thread(_bulk_insert_all)
+            total_inserted = len(rows)
 
         return total_inserted
 

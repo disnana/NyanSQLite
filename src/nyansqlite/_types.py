@@ -123,11 +123,23 @@ def serialize_value(value: Any, annotation: Any) -> Any:
     """Convert a Python value to a SQLite-storable scalar."""
     if value is None:
         return None
+    
+    # 頻出する基本型を型チェックで先に処理し、resolve_type を回避する
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        # bool は int のサブクラスなので here で処理される可能性があるが、
+        # SQLite では bool も int(0/1) として扱うので問題ない。
+        # ただし明示的に bool を 0/1 にしたい場合は先にチェックが必要。
+        if isinstance(value, bool):
+            return int(value)
+        return value
+    if isinstance(value, float):
+        return value
+
     base, _ = resolve_type(annotation)
     origin = get_origin(base)
 
-    if isinstance(value, bool):
-        return int(value)
     if isinstance(value, (dict, list)) or origin in (dict, list):
         return json.dumps(value, ensure_ascii=False, default=str)
     if isinstance(value, datetime):
