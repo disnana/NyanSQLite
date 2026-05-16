@@ -1,5 +1,6 @@
 from ._markers import CompositeIndex, Indexed, Searchable, UniqueIndexed
 from .core import NyanSQLite
+from .core_aio import NyanSQLiteAIO
 from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
@@ -10,6 +11,7 @@ from .exceptions import (
 
 __all__ = [
     "NyanSQLite",
+    "NyanSQLiteAIO",
     "Indexed",
     "UniqueIndexed",
     "Searchable",
@@ -20,4 +22,4 @@ __all__ = [
     "TableNameCollisionError",
     "QueryValidationError",
 ]
-__version__ = "1.0.1"
+__version__ = "1.1.1"

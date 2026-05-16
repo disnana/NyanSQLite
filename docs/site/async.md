@@ -1,34 +1,70 @@
-﻿# 非同期サポートについて（計画中）
+﻿# 非同期サポート (`NyanSQLiteAIO`)
 
-現在、NyanSQLite v1.0.x 系では、非同期（async/await）のネイティブサポートは含まれていません。
+NyanSQLite v1.1.0 から、`asyncio` を使用した非同期プログラミングをネイティブにサポートする `NyanSQLiteAIO` クラスが導入されました。
 
-## 現在の状況
+## 特徴
 
-現在の `NyanSQLite` クラスは同期的な操作（ブロッキングI/O）を基本として設計されています。
-データベース操作は `threading.Lock` によってスレッドセーフに保たれていますが、`asyncio` イベントループを直接考慮した設計にはなっていません。
+`NyanSQLiteAIO` は、以下の特徴を持っています：
 
-### 非同期環境での暫定的な使用方法
+1. **ノンブロッキング I/O**: 内部で `asyncio.to_thread` を使用し、データベース操作をバックグラウンドスレッドで実行することで、イベントループをブロックしません。
+2. **スレッドセーフ**: 書き込み操作には非同期ロックを使用し、マルチスレッド/非同期環境での安全性を確保しています。
+3. **最適化された読み取り**: クエリの実行からデータのパース（Pydantic モデルへの変換）までをバックグラウンドスレッド内で一括して行うことで、コンテキストスイッチのオーバーヘッドを最小限に抑えています。
 
-FastAPI などの非同期フレームワークで NyanSQLite を使用する場合、ブロッキング操作を避けるために `run_in_executor` などを使用して同期メソッドを呼び出す必要があります。
+## 基本的な使い方
+
+`NyanSQLiteAIO` は非同期コンテキストマネージャをサポートしており、`async with` 構文で安全に接続・切断を行えます。
 
 ```python
 import asyncio
-from nyansqlite import NyanSQLite
+from pydantic import BaseModel
+from nyansqlite import NyanSQLiteAIO, Indexed
 
-db = NyanSQLite("app.db")
+class User(BaseModel):
+    id: int
+    name: Indexed[str]
 
-async def get_article(article_id: int):
-    loop = asyncio.get_running_loop()
-    # 同期メソッドをエグゼキュータで実行
-    return await loop.run_in_executor(None, db.get, Article, id=article_id)
+async def main():
+    # 非同期コンテキストマネージャを使用
+    async with NyanSQLiteAIO("app.db") as db:
+        db.register(User)
+        
+        # 非同期挿入
+        await db.insert(User(id=1, name="alice"))
+        
+        # 非同期クエリ
+        users = await db.query(User, name="alice")
+        if users:
+            print(f"Found: {users[0].name}")
+
+        # 一括挿入
+        await db.insert_many([
+            User(id=i, name=f"user_{i}") for i in range(2, 6)
+        ])
+        
+        # カウント操作
+        count = await db.count(User)
+        print(f"Total users: {count}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-## ロードマップ
+## メソッド一覧
 
-将来のバージョンでは、以下の機能を含むネイティブな非同期サポート（`AsyncNyanSQLite`）の導入を検討しています：
+`NyanSQLite` (同期版) とほぼ同じ API を非同期（`await` 可能）として提供しています：
 
-1. **専用スレッドプール**: データベース操作をバックグラウンドスレッドで実行し、イベントループをブロックしない。
-2. **非同期クエリ API**: `await db.query(...)` のような直感的な非同期インターフェース。
-3. **接続プール**: 非同期環境での効率的な接続管理。
+- `await db.insert(obj)`
+- `await db.insert_many(objs)`
+- `await db.query(model, ...)`
+- `await db.get(model, ...)`
+- `await db.select(model, fields, ...)`
+- `await db.search(model, query, ...)`
+- `await db.update(model, where, ...)`
+- `await db.delete(model, ...)`
+- `await db.count(model, ...)`
+- `await db.exists(model, ...)`
 
-非同期サポートに関する進捗や要望がある場合は、GitHubのリポジトリにてお知らせください。
+## パフォーマンスの最適化
+
+v1.1.0 以降、読み取り操作（`query`, `select`, `search`）は特に最適化されています。
+従来の `loop.run_in_executor` を個別に呼び出す方法に比べ、データのフェッチと Python オブジェクトへの変換を同一のスレッド内で連続して行うことで、非同期環境下での高いスループットを実現しています。

@@ -64,7 +64,7 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
-            const previewUrl = `https://nanasqlite.disnana.com/preview/pr-${prNumber}/`;
+            const previewUrl = `https://nyansqlite.disnana.com/preview/pr-${prNumber}/`;
             const body = [
               '## 📖 ドキュメントプレビュー / Documentation Preview',
               '',

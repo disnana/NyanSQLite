@@ -13,6 +13,19 @@ class NyanSQLite(path: str = ':memory:', wal: bool = True, strict_deserializatio
 ```
 
 Pydantic-native SQLite wrapper.
+
+## NyanSQLiteAIO
+
+```python
+class NyanSQLiteAIO(path: str = ':memory:', wal: bool = True, strict_deserialization: bool = False)
+```
+
+Asynchronous version of `NyanSQLite`. Provides non-blocking database operations using `asyncio`.
+
+It uses `asyncio.to_thread` internally to maintain thread-safe access without blocking the event loop.
+Most methods are defined as `async` and require `await` when called.
+
+Core functionality is identical to `NyanSQLite`. See [Async Support](./async) for details.
     Supports automatic schema creation, B-tree indexes, FTS5 full-text search,
     partial reads/writes, and advanced query operators.
     Powered by the high-performance `apsw` backend.

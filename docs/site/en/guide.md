@@ -35,11 +35,12 @@ Traditional database solutions require learning SQL, managing connections, and h
 2. **Auto Serialization**: Transparently handle complex types like dict, list, and datetime.
 3. **Django-like Queries**: Intuitive syntax for complex filtering without writing SQL.
 4. **Fast Search**: Built-in support for SQLite's FTS5 full-text search.
+5. **Async Support**: Native `NyanSQLiteAIO` class for `asyncio`.
 
 ### Design Principles
 
 1. **Instant Persistence**: Every write operation is immediately persisted to SQLite.
-2. **Thread Safe**: Protected by `threading.Lock` for safe concurrent access.
+2. **Thread Safe**: Protected by `threading.Lock` and async locks for safe concurrent access.
 3. **Zero Config**: Sensible defaults optimized for performance (WAL mode, etc.).
 
 ---

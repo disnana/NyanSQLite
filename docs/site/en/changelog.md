@@ -4,6 +4,38 @@ outline: [2, 3]
 
 # CHANGELOG
 
+## [1.1.1] - 2026-05-16
+
+### 🚀 Added
+- **Explicit Transactions**: Added `atomic()` context manager to `NyanSQLite` and `async with atomic()` to `NyanSQLiteAIO` for manual transaction control.
+- **Nested Transactions**: Added support for nested `atomic()` blocks.
+
+### 🔄 Changed
+- **Thread Safety**: Improved thread safety by switching to `threading.RLock` in `NyanSQLite`.
+- **Async Safety**: Implemented re-entrant async lock in `NyanSQLiteAIO` to prevent deadlocks when using `atomic()`.
+
+---
+
+## [1.1.0] - 2026-05-16
+
+### 🚀 Added
+- **Asynchronous Support**: Full support for `asyncio` via `NyanSQLiteAIO` class.
+- **Improved Performance**: Optimized read operations by minimizing thread context switching and processing rows efficiently in `asyncio.to_thread`.
+- **Documentation Updates**: Added English and Japanese documentation for asynchronous usage.
+
+### 🔄 Changed
+- Internal optimization for `query`, `select`, and `search` methods in `NyanSQLiteAIO`.
+- Optimized read operations in synchronous `NyanSQLite` class by minimizing lock duration.
+
+---
+
+## [1.0.1] - 2026-05-15
+
+### 🐞 Fixed
+- Minor bug fixes and performance improvements.
+
+---
+
 ## [1.0.0] - 2026-05-15
 
 ### 🚀 Added

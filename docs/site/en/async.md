@@ -1,34 +1,70 @@
-# Async Support (Planned)
+# Asynchronous Support (`NyanSQLiteAIO`)
 
-Currently, NyanSQLite v1.0.x does not include native support for asynchronous operations (async/await).
+Starting from NyanSQLite v1.1.0, the `NyanSQLiteAIO` class has been introduced to natively support asynchronous programming using `asyncio`.
 
-## Current Status
+## Features
 
-The current `NyanSQLite` class is designed for synchronous operations (blocking I/O).
-While database operations are kept thread-safe via `threading.Lock`, it is not specifically designed for the `asyncio` event loop.
+`NyanSQLiteAIO` offers the following features:
 
-### Temporary Usage in Async Environments
+1. **Non-blocking I/O**: It uses `asyncio.to_thread` internally to execute database operations in background threads, ensuring the event loop remains unblocked.
+2. **Thread Safety**: It uses asynchronous locks for write operations, ensuring safety in multi-threaded and asynchronous environments.
+3. **Optimized Reads**: Fetching data and parsing it into Pydantic models are performed together in a single background thread, minimizing context-switching overhead.
 
-To use NyanSQLite in async frameworks like FastAPI, you should use `run_in_executor` to avoid blocking the event loop.
+## Basic Usage
+
+`NyanSQLiteAIO` supports asynchronous context managers, allowing for safe connection and disconnection using the `async with` syntax.
 
 ```python
 import asyncio
-from nyansqlite import NyanSQLite
+from pydantic import BaseModel
+from nyansqlite import NyanSQLiteAIO, Indexed
 
-db = NyanSQLite("app.db")
+class User(BaseModel):
+    id: int
+    name: Indexed[str]
 
-async def get_article(article_id: int):
-    loop = asyncio.get_running_loop()
-    # Execute synchronous method in executor
-    return await loop.run_in_executor(None, db.get, Article, id=article_id)
+async def main():
+    # Use asynchronous context manager
+    async with NyanSQLiteAIO("app.db") as db:
+        db.register(User)
+        
+        # Async Insert
+        await db.insert(User(id=1, name="alice"))
+        
+        # Async Query
+        users = await db.query(User, name="alice")
+        if users:
+            print(f"Found: {users[0].name}")
+
+        # Bulk Insert
+        await db.insert_many([
+            User(id=i, name=f"user_{i}") for i in range(2, 6)
+        ])
+        
+        # Count Operation
+        count = await db.count(User)
+        print(f"Total users: {count}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-## Roadmap
+## Method Overview
 
-Future versions are planned to include native async support (`AsyncNyanSQLite`) with features such as:
+It provides almost the same API as `NyanSQLite` (synchronous version) but as asynchronous (awaitable) methods:
 
-1. **Dedicated Thread Pool**: Running database operations in background threads to avoid blocking the event loop.
-2. **Async Query API**: Intuitive async interface like `await db.query(...)`.
-3. **Connection Pooling**: Efficient connection management for async environments.
+- `await db.insert(obj)`
+- `await db.insert_many(objs)`
+- `await db.query(model, ...)`
+- `await db.get(model, ...)`
+- `await db.select(model, fields, ...)`
+- `await db.search(model, query, ...)`
+- `await db.update(model, where, ...)`
+- `await db.delete(model, ...)`
+- `await db.count(model, ...)`
+- `await db.exists(model, ...)`
 
-Please let us know on the GitHub repository if you have any feedback or requests regarding async support.
+## Performance Optimization
+
+Since v1.1.0, read operations (`query`, `select`, `search`) have been specifically optimized. 
+By combining data fetching and deserialization into a single thread execution, it achieves higher throughput in asynchronous environments compared to calling `loop.run_in_executor` for individual steps.

@@ -196,6 +196,46 @@ for t in threads: t.start()
 for t in threads: t.join()
 ```
 
+#### 非同期サポート (`asyncio`)
+
+`NyanSQLiteAIO` クラスを使用することで、非同期プログラミング（`asyncio`）を完全にサポートします。内部的には `asyncio.to_thread` を活用し、DB操作をスレッドセーフかつノンブロッキングに実行します。
+
+```python
+import asyncio
+from nyansqlite import NyanSQLiteAIO, Indexed
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: Indexed[str]
+
+async def main():
+    # 1. 非同期コンテキストマネージャによる接続
+    async with NyanSQLiteAIO("async.db") as db:
+        # 2. モデルの登録（初回のみテーブル作成）
+        db.register(User)
+        
+        # 3. 非同期挿入
+        # 内部でスレッドセーフに実行されます
+        await db.insert(User(id=1, name="alice"))
+        
+        # 4. 非同期クエリ
+        # Django風のクエリも非同期で利用可能
+        users = await db.query(User, name="alice")
+        print(f"Found: {users[0].name}")
+
+        # 5. 一括挿入も非同期
+        await db.insert_many([
+            User(id=i, name=f"user_{i}") for i in range(2, 5)
+        ])
+        
+        # 6. その他のメソッドも await が必要です
+        count = await db.count(User)
+        print(f"Total users: {count}")
+
+asyncio.run(main())
+```
+
 #### 破損データの安全な処理（`strict_deserialization`）
 
 DB内に不正なJSONや日付フォーマットが混入した場合、2つのモードから選択できます：
@@ -456,6 +496,45 @@ def worker():
 threads = [threading.Thread(target=worker) for _ in range(10)]
 for t in threads: t.start()
 for t in threads: t.join()
+```
+
+#### Asynchronous Support (`asyncio`)
+
+NyanSQLite provides full support for `asyncio` via the `NyanSQLiteAIO` class. It uses `asyncio.to_thread` internally to keep operations non-blocking and thread-safe.
+
+```python
+import asyncio
+from nyansqlite import NyanSQLiteAIO, Indexed
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name: Indexed[str]
+
+async def main():
+    # 1. Connection via async context manager
+    async with NyanSQLiteAIO("async.db") as db:
+        # 2. Register models
+        db.register(User)
+        
+        # 3. Async Insert
+        await db.insert(User(id=1, name="alice"))
+        
+        # 4. Async Query
+        # Django-like queries are fully supported
+        users = await db.query(User, name="alice")
+        print(f"Found: {users[0].name}")
+
+        # 5. Bulk insert
+        await db.insert_many([
+            User(id=i, name=f"user_{i}") for i in range(2, 5)
+        ])
+        
+        # 6. All read/write operations must be awaited
+        exists = await db.exists(User, name="user_2")
+        print(f"User 2 exists: {exists}")
+
+asyncio.run(main())
 ```
 
 #### Graceful Data Corruption Handling with `strict_deserialization`
