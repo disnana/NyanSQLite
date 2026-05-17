@@ -42,6 +42,8 @@ class NyanConnection:
             ("foreign_keys", "ON"),
             ("synchronous",  "NORMAL"),
             ("cache_size",   "-65536"),   # 64 MB
+            ("temp_store",   "MEMORY"),
+            ("mmap_size",    "268435456"),  # 256 MB
         ]
         for pragma, value in pragmas:
             self._raw(f"PRAGMA {pragma} = {value}")
