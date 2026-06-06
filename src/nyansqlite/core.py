@@ -66,6 +66,11 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
         match = _OP_PATTERN.match(filt)
         if match:
             field, op, val_str = match.groups()
+            if model_meta and field not in model_meta.hints:
+                raise FieldNotFoundError(
+                    f"モデルにフィールド '{field}' が見つかりません。 "
+                    f"利用可能なフィールド: {list(model_meta.hints.keys())}"
+                )
             clauses.append(f'"{field}" {op} ?')
             # val_strをPythonリテラル(int, floatなど)に変換を試みる
             # 引用符で囲まれた文字列の場合、引用符を削除
@@ -73,17 +78,23 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
             if (val_str.startswith("'") and val_str.endswith("'")) or \
                (val_str.startswith('"') and val_str.endswith('"')):
                 values.append(val_str[1:-1])
-            elif val_str.isdigit():
+            elif val_str.isdigit() or (val_str.startswith("-") and val_str[1:].isdigit()):
                 values.append(int(val_str))
             else:
                 try:
                     values.append(float(val_str))
                 except ValueError:
-                    values.append(val_str)
+                    raise QueryValidationError(
+                        f"安全でない、または未対応の文字列フィルタです: {filt!r}。 "
+                        "サポート形式は `field = value`, `field > 10`, `field = 'text'` です。"
+                    )
         else:
             # シンプルな演算子パターンに一致しない場合、SQLインジェクションのリスクがあるため、
             # 現時点では明示的な演算子のみをサポート
-            clauses.append(filt)
+            raise QueryValidationError(
+                f"安全でない、または未対応の文字列フィルタです: {filt!r}。 "
+                "キーワード引数または明示的な比較演算子を使用してください。"
+            )
 
     # キーワードフィルタを処理: age__gt=10
     for key, value in kwargs.items():
@@ -163,16 +174,22 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
             elif op == "in":
                 try:
                     # 'in' 演算子には値がイテラブルであることを確認
-                    if not isinstance(serialized_value, (list, tuple, set)):
+                    if not isinstance(value, (list, tuple, set)):
                         raise TypeError("'in' 演算子の値はイテラブルである必要があります。")
-                    ph = ", ".join("?" * len(serialized_value))
+                    if not value:
+                        clauses.append("0")
+                        continue
+                    ph = ", ".join("?" * len(value))
                 except TypeError as e:
                     raise QueryValidationError(
-                        f"フィルタ {key} はイテラブルを期待していますが、'{type(serialized_value).__name__}' を受け取りました。 "
+                        f"フィルタ {key} はイテラブルを期待していますが、'{type(value).__name__}' を受け取りました。 "
                         f"エラー: {e}"
                     ) from e
                 clauses.append(f"{q} IN ({ph})")
-                values.extend(serialized_value)
+                if model_meta and field_name in model_meta.hints:
+                    values.extend(serialize_value(v, model_meta.hints[field_name]) for v in value)
+                else:
+                    values.extend(value)
             elif op == "is_null":
                 clauses.append(f"{q} IS {'NULL' if value else 'NOT NULL'}")
             else:
@@ -197,9 +214,21 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
     """LIMITおよびOFFSET句を構築します。"""
     sql = ""
     if limit is not None:
-        sql += f" LIMIT {int(limit)}"
+        try:
+            limit_value = int(limit)
+        except (TypeError, ValueError) as e:
+            raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}") from e
+        if limit_value < 0:
+            raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
+        sql += f" LIMIT {limit_value}"
     if offset is not None:
-        sql += f" OFFSET {int(offset)}"
+        try:
+            offset_value = int(offset)
+        except (TypeError, ValueError) as e:
+            raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}") from e
+        if offset_value < 0:
+            raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
+        sql += f" OFFSET {offset_value}"
     return sql
 
 
@@ -418,7 +447,10 @@ class NyanSQLite:
         """
         if not objs:
             return 0
-        meta = self._meta(type(objs[0]))
+        model_type = type(objs[0])
+        if any(type(o) is not model_type for o in objs):
+            raise TypeError("insert_many() には同じモデル型のインスタンスだけを渡してください。")
+        meta = self._meta(model_type)
         hints = meta.hints
         fields = list(hints.keys())
 
@@ -747,7 +779,8 @@ class NyanSQLite:
 
     def vacuum(self) -> None:
         """データベースを VACUUM してディスク領域を解放します。"""
-        self._conn.execute("VACUUM")
+        with self._lock:
+            self._conn.execute("VACUUM")
 
     # ── RAW SQL ───────────────────────────────────────────────────────── #
 

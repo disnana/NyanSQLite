@@ -43,7 +43,7 @@ def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offs
 ```
 Djangoライクなフィルタリングを使用してデータを検索し、モデルインスタンスのリストを返します。
 
-- `filters`: `"age > 20"` のような文字列形式のフィルタ。
+- `filters`: `"age > 20"` のような文字列形式のフィルタ。v1.1.4dev1 以降は、安全のため明示的な単純比較のみサポートします。
 - `kwargs`: `name="Alice"`, `views__gte=100` のようなキーワード形式のフィルタ。
 - `limit` / `offset`: 取得件数と開始位置の制限。
 - `order_by`: ソート対象のフィールド名。

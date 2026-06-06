@@ -4,6 +4,28 @@ outline: [2, 3]
 
 # CHANGELOG
 
+## [1.1.4dev1] - 2026-06-06
+
+### 🐞 Fixed
+- Hardened string filters so unsupported raw SQL fragments now raise `QueryValidationError` instead of being passed through to SQL.
+- Aligned async query validation with the sync implementation, including unknown-field checks and model-aware filter value serialization.
+- Fixed async filtering for `date`, `datetime`, `list`, and `dict` values.
+- Fixed `__in` handling so normal lists/tuples/sets work consistently and empty collections return no rows.
+- Added validation for negative or invalid `limit` / `offset` values.
+- Added a clear `TypeError` when `insert_many()` receives mixed model types.
+- Protected `vacuum()`, async `execute_raw()`, async `vacuum()`, and async `close()` with the existing connection locks.
+
+### 🧪 Tests
+- Added regression tests for unsafe string filters, async field validation, serialized filter values, `__in`, pagination bounds, and mixed-model bulk inserts.
+
+### 📚 Docs
+- Added an APSW full-access implementation plan.
+
+### ⚠️ Compatibility
+- String filters now support only simple comparisons such as `"age > 10"` or `"name = 'Alice'"`. Use keyword filters such as `age__gte=10` for advanced filtering.
+
+---
+
 ## [1.1.1] - 2026-05-16
 
 ### 🚀 Added

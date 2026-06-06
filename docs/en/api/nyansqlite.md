@@ -43,7 +43,7 @@ def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offs
 ```
 Searches for data using Django-like filtering and returns a list of model instances.
 
-- `filters`: String-based filters like `"age > 20"`.
+- `filters`: String-based filters like `"age > 20"`. Since v1.1.4dev1, only explicit simple comparisons are supported for safety.
 - `kwargs`: Keyword-based filters like `name="Alice"`, `views__gte=100`.
 - `limit` / `offset`: Constraints for the number of results and starting position.
 - `order_by`: Field name to sort by.

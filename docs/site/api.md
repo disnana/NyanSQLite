@@ -294,6 +294,7 @@ def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Op
 フィルタリング、ソート、ページネーションを使用して行を検索します。
 
 文字列フィルタおよび演算子サフィックス（`__gt`, `__like` など）をサポートしています。
+v1.1.4dev1 以降、文字列フィルタは安全のため明示的な単純比較のみサポートします。
 Supports string filters and operator suffixes (``__gt``, ``__like``, …).
 
 #### 引数名

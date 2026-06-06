@@ -33,7 +33,7 @@ M = TypeVar("M", bound=BaseModel)
 
 _OP_PATTERN = re.compile(r"^\s*(\w+)\s*(>=|<=|!=|>|<|=)\s*(.*)$")
 
-def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, list[Any]]:
+def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Optional[_Meta] = None) -> tuple[str, list[Any]]:
     """Build a parameterised WHERE clause from string filters and keyword arguments.
 
     String filters (args):
@@ -65,6 +65,11 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
         match = _OP_PATTERN.match(filt)
         if match:
             field, op, val_str = match.groups()
+            if model_meta and field not in model_meta.hints:
+                raise FieldNotFoundError(
+                    f"Fields not found on model: ['{field}']. "
+                    f"Available: {list(model_meta.hints)}"
+                )
             clauses.append(f'"{field}" {op} ?')
             # Try to convert val_str to a Python literal (int, float, etc.)
             # If it's a quoted string, strip quotes.
@@ -72,81 +77,103 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
             if (val_str.startswith("'") and val_str.endswith("'")) or \
                (val_str.startswith('"') and val_str.endswith('"')):
                 values.append(val_str[1:-1])
-            elif val_str.isdigit():
+            elif val_str.isdigit() or (val_str.startswith("-") and val_str[1:].isdigit()):
                 values.append(int(val_str))
             else:
                 try:
                     values.append(float(val_str))
                 except ValueError:
-                    values.append(val_str)
+                    raise QueryValidationError(
+                        f"Unsafe or unsupported string filter: {filt!r}. "
+                        "Supported forms include `field = value`, `field > 10`, and `field = 'text'`."
+                    )
         else:
             # If it doesn't match our simple operator pattern,
             # we might just pass it through, but it's risky for SQL injection.
             # For now, let's only support the explicit operators.
-            clauses.append(filt)
+            raise QueryValidationError(
+                f"Unsafe or unsupported string filter: {filt!r}. "
+                "Use keyword filters or an explicit comparison operator."
+            )
 
     # Process keyword filters: age__gt=10
     for key, value in kwargs.items():
+        field_name = key.split("__")[0]
+        if model_meta and field_name not in model_meta.hints:
+            raise FieldNotFoundError(
+                f"Fields not found on model: ['{field_name}']. "
+                f"Available: {list(model_meta.hints)}"
+            )
+
+        serialized_value = value
+        if model_meta and field_name in model_meta.hints:
+            serialized_value = serialize_value(value, model_meta.hints[field_name])
+
         if "__" in key:
             field, op = key.rsplit("__", 1)
             q = f'"{field}"'
             if op == "ne":
                 clauses.append(f"{q} != ?")
-                values.append(value)
+                values.append(serialized_value)
             elif op == "gt":
                 clauses.append(f"{q} > ?")
                 # Validate that value is a scalar that supports ordering.
                 try:
-                    _ref = value
-                    _ = value > _ref
+                    _ref = serialized_value
+                    _ = serialized_value > _ref
                 except TypeError as e:
                     raise QueryValidationError(
                         f"Type mismatch in filter {key}={value!r}. "
                         f"Cannot apply '>' operator to {type(value).__name__}. "
                         f"Error: {e}"
                     ) from e
-                values.append(value)
+                values.append(serialized_value)
             elif op == "gte":
                 clauses.append(f"{q} >= ?")
                 try:
-                    _ref = value
-                    _ = value >= _ref
+                    _ref = serialized_value
+                    _ = serialized_value >= _ref
                 except TypeError as e:
                     raise QueryValidationError(
                         f"Type mismatch in filter {key}={value!r}. "
                         f"Cannot apply '>=' operator to {type(value).__name__}. "
                         f"Error: {e}"
                     ) from e
-                values.append(value)
+                values.append(serialized_value)
             elif op == "lt":
                 clauses.append(f"{q} < ?")
                 try:
-                    _ref = value
-                    _ = value < _ref
+                    _ref = serialized_value
+                    _ = serialized_value < _ref
                 except TypeError as e:
                     raise QueryValidationError(
                         f"Type mismatch in filter {key}={value!r}. "
                         f"Cannot apply '<' operator to {type(value).__name__}. "
                         f"Error: {e}"
                     ) from e
-                values.append(value)
+                values.append(serialized_value)
             elif op == "lte":
                 clauses.append(f"{q} <= ?")
                 try:
-                    _ref = value
-                    _ = value <= _ref
+                    _ref = serialized_value
+                    _ = serialized_value <= _ref
                 except TypeError as e:
                     raise QueryValidationError(
                         f"Type mismatch in filter {key}={value!r}. "
                         f"Cannot apply '<=' operator to {type(value).__name__}. "
                         f"Error: {e}"
                     ) from e
-                values.append(value)
+                values.append(serialized_value)
             elif op == "like":
                 clauses.append(f"{q} LIKE ?")
-                values.append(value)
+                values.append(serialized_value)
             elif op == "in":
                 try:
+                    if not isinstance(value, (list, tuple, set)):
+                        raise TypeError("'in' filter value must be iterable.")
+                    if not value:
+                        clauses.append("0")
+                        continue
                     ph = ", ".join("?" * len(value))
                 except TypeError as e:
                     raise QueryValidationError(
@@ -154,13 +181,10 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
                         f"Error: {e}"
                     ) from e
                 clauses.append(f"{q} IN ({ph})")
-                try:
+                if model_meta and field_name in model_meta.hints:
+                    values.extend(serialize_value(v, model_meta.hints[field_name]) for v in value)
+                else:
                     values.extend(value)
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"Filter {key}: Cannot extend values from {type(value).__name__}. "
-                        f"Expected iterable. Error: {e}"
-                    ) from e
             elif op == "is_null":
                 clauses.append(f"{q} IS {'NULL' if value else 'NOT NULL'}")
             else:
@@ -169,7 +193,7 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any]) -> tuple[str, li
             clauses.append(f'"{key}" IS NULL')
         else:
             clauses.append(f'"{key}" = ?')
-            values.append(value)
+            values.append(serialized_value)
 
     return "WHERE " + " AND ".join(clauses), values
 
@@ -183,9 +207,21 @@ def _order_sql(order_by: Optional[str], desc: bool) -> str:
 def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
     sql = ""
     if limit is not None:
-        sql += f" LIMIT {int(limit)}"
+        try:
+            limit_value = int(limit)
+        except (TypeError, ValueError) as e:
+            raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}") from e
+        if limit_value < 0:
+            raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}")
+        sql += f" LIMIT {limit_value}"
     if offset is not None:
-        sql += f" OFFSET {int(offset)}"
+        try:
+            offset_value = int(offset)
+        except (TypeError, ValueError) as e:
+            raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}") from e
+        if offset_value < 0:
+            raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}")
+        sql += f" OFFSET {offset_value}"
     return sql
 
 
@@ -412,7 +448,10 @@ class NyanSQLiteAIO:
         """
         if not objs:
             return 0
-        meta = self._meta(type(objs[0]))
+        model_type = type(objs[0])
+        if any(type(o) is not model_type for o in objs):
+            raise TypeError("insert_many() only accepts instances of the same model type.")
+        meta = self._meta(model_type)
         hints = meta.hints
         fields = list(hints.keys())
 
@@ -484,7 +523,7 @@ class NyanSQLiteAIO:
             set_parts.append(f'"{fname}" = ?')
             set_vals.append(serialize_value(value, meta.hints[fname]))
 
-        where_clause, where_vals = _build_where((), where)
+        where_clause, where_vals = _build_where((), where, model_meta=meta)
         sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'
 
         async with self._lock_context(): # Use write lock
@@ -512,7 +551,7 @@ class NyanSQLiteAIO:
                  Number of rows deleted.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs)
+        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql = f'DELETE FROM "{meta.table}" {where_clause}'
 
         async with self._lock_context(): # Use write lock
@@ -576,7 +615,7 @@ class NyanSQLiteAIO:
                      List of matching model instances.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs)
+        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
 
         if order_by:
             meta.check_fields([order_by], model.__name__)
@@ -641,7 +680,7 @@ class NyanSQLiteAIO:
             meta.check_fields([order_by], model.__name__)
 
         col_sql      = ", ".join(f'"{f}"' for f in fields)
-        where_clause, values = _build_where(filters, kwargs)
+        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql = (
             f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'
             + _order_sql(order_by, desc)
@@ -727,7 +766,7 @@ class NyanSQLiteAIO:
                  Number of matching rows.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs)
+        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
 
         # Remove async with self._lock
@@ -753,7 +792,7 @@ class NyanSQLiteAIO:
                   True if matching rows exist, False otherwise.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs)
+        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
 
         # Remove async with self._lock
@@ -787,13 +826,8 @@ class NyanSQLiteAIO:
         """データベースを VACUUM してディスク領域を解放します。
         VACUUM the database to reclaim disk space.
         """
-        # VACUUM is a write operation, so it should be protected by the write lock.
-        # However, the original code did not use a lock for vacuum.
-        # For now, I'll keep it without a lock, assuming it's a maintenance task
-        # that won't conflict with concurrent reads, but it should be considered
-        # if concurrent writes are happening.
-        # For now, I'll assume it's fine to not lock it, as it's a full DB operation.
-        await asyncio.to_thread(lambda: self._conn.execute("VACUUM"))
+        async with self._lock_context():
+            await asyncio.to_thread(lambda: self._conn.execute("VACUUM"))
 
     # ── RAW SQL ───────────────────────────────────────────────────────── #
 
@@ -811,15 +845,8 @@ class NyanSQLiteAIO:
             list[dict[str, Any]]: 結果行のリスト（各行は辞書）。
                                  List of result rows as dicts.
         """
-        # This method can be used for both reads and writes.
-        # Without knowing the intent of the SQL, it's safer to assume it might be a write.
-        # However, the original code did not use a lock.
-        # For maximum performance for reads, it should not be locked.
-        # For safety, if it's a write, it should be locked.
-        # Given the user's request to remove locks from read operations,
-        # and this is a generic raw execute, I will leave it unlocked for now,
-        # but this is a potential area for refinement if write safety is paramount for raw SQL.
-        return await asyncio.to_thread(lambda: self._conn.execute(sql, params))
+        async with self._lock_context():
+            return await asyncio.to_thread(lambda: self._conn.execute(sql, params))
 
     @asynccontextmanager
     async def atomic(self) -> AsyncGenerator[None, None]:
@@ -861,11 +888,8 @@ class NyanSQLiteAIO:
         """データベース接続を閉じます。
         Close the underlying database connection.
         """
-        # Closing the connection should probably be protected by a write lock
-        # to ensure no other operations are in progress.
-        # However, the original code did not use a lock.
-        # For now, I'll keep it without a lock.
-        await asyncio.to_thread(lambda: self._conn.close())
+        async with self._lock_context():
+            await asyncio.to_thread(lambda: self._conn.close())
 
     @property
     def backend(self) -> str:

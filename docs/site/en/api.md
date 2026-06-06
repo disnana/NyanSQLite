@@ -286,6 +286,7 @@ def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Op
 Query rows with optional filtering, ordering, and pagination.
 
 Supports string filters and operator suffixes (``__gt``, ``__like``, …).
+Since v1.1.4dev1, string filters only support explicit simple comparisons for safety.
 
 #### Parameter
 

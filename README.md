@@ -102,10 +102,14 @@ db.query(Article,
     views__ne=50,           # !=
 )
 
-# 文字列フィルタ
+# LIKE フィルタ
 db.query(Article,
     title__like="%Python%", # LIKE検索
 )
+
+# 単純な文字列フィルタも利用できます
+# v1.1.4dev1 以降、SQL注入を避けるため明示的な単純比較のみサポートします
+db.query(Article, "views > 10")
 
 # IN句
 db.query(Article,
