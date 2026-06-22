@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [1.1.4dev1] - 2026-06-06
+## [1.1.4] - 2026-06-22
 
 ### 🐞 Fixed
 - Hardened string filters so unsupported raw SQL fragments now raise `QueryValidationError` instead of being passed through to SQL.
@@ -73,7 +73,7 @@
 
 # 更新履歴
 
-## [1.1.4dev1] - 2026-06-06
+## [1.1.4] - 2026-06-22
 
 ### 🐞 修正
 - 未対応の生SQL断片を文字列フィルタとして渡した場合、SQLへ素通しせず `QueryValidationError` を送出するようにしました。
