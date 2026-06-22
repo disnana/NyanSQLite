@@ -7,12 +7,14 @@
 - Aligned async query validation with the sync implementation, including unknown-field checks and model-aware filter value serialization.
 - Fixed async filtering for `date`, `datetime`, `list`, and `dict` values.
 - Fixed `__in` handling so normal lists/tuples/sets work consistently and empty collections return no rows.
-- Added validation for negative or invalid `limit` / `offset` values.
+- Fixed offset-only pagination by emitting SQLite's required unlimited `LIMIT` clause.
+- Tightened `limit` / `offset` validation to reject negative values, floats, booleans, and strings.
 - Added a clear `TypeError` when `insert_many()` receives mixed model types.
-- Protected `vacuum()`, async `execute_raw()`, async `vacuum()`, and async `close()` with the existing connection locks.
+- Serialized reads and connection shutdown with the existing locks so `close()` cannot race active queries.
+- Protected `vacuum()` and async `execute_raw()` with the existing connection locks.
 
 ### 🧪 Tests
-- Added regression tests for unsafe string filters, async field validation, serialized filter values, `__in`, pagination bounds, and mixed-model bulk inserts.
+- Added regression tests for unsafe string filters, async field validation, serialized filter values, `__in`, offset-only pagination, strict pagination types, and mixed-model bulk inserts.
 
 ### 📚 Docs
 - Added an APSW full-access implementation plan.
@@ -80,12 +82,14 @@
 - 非同期版のクエリ検証を同期版と揃え、未知フィールド検証とモデル定義に基づくフィルタ値シリアライズを追加しました。
 - 非同期版で `date` / `datetime` / `list` / `dict` のフィルタが正しく動くようにしました。
 - `__in` の通常ケースを修正し、空コレクションは0件一致として扱うようにしました。
-- 負数または不正な `limit` / `offset` を拒否するようにしました。
+- `offset` のみを指定した場合もSQLiteで有効な無制限 `LIMIT` 句を生成するようにしました。
+- `limit` / `offset` で負数、小数、真偽値、文字列を拒否するよう検証を厳格化しました。
 - `insert_many()` に異なるモデル型が混在した場合、明確に `TypeError` を送出するようにしました。
-- `vacuum()`、非同期版の `execute_raw()` / `vacuum()` / `close()` を既存ロックで保護しました。
+- 読み取り処理と接続終了を既存ロックで直列化し、実行中のクエリと `close()` が競合しないようにしました。
+- `vacuum()` と非同期版の `execute_raw()` を既存ロックで保護しました。
 
 ### 🧪 テスト
-- 危険な文字列フィルタ、非同期版のフィールド検証、シリアライズ対象フィルタ値、`__in`、ページネーション境界、混在モデル一括挿入の回帰テストを追加しました。
+- 危険な文字列フィルタ、非同期版のフィールド検証、シリアライズ対象フィルタ値、`__in`、offset単独指定、ページネーション型検証、混在モデル一括挿入の回帰テストを追加しました。
 
 ### 📚 ドキュメント
 - APSW 全機能アクセスに向けた段階的な実装計画を追加しました。

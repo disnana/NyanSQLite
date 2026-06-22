@@ -4,6 +4,7 @@ import re
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
+from numbers import Integral
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
@@ -214,20 +215,20 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
     """LIMITおよびOFFSET句を構築します。"""
     sql = ""
     if limit is not None:
-        try:
-            limit_value = int(limit)
-        except (TypeError, ValueError) as e:
-            raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}") from e
+        if isinstance(limit, bool) or not isinstance(limit, Integral):
+            raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
+        limit_value = int(limit)
         if limit_value < 0:
             raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
         sql += f" LIMIT {limit_value}"
     if offset is not None:
-        try:
-            offset_value = int(offset)
-        except (TypeError, ValueError) as e:
-            raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}") from e
+        if isinstance(offset, bool) or not isinstance(offset, Integral):
+            raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
+        offset_value = int(offset)
         if offset_value < 0:
             raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
+        if limit is None:
+            sql += " LIMIT -1"
         sql += f" OFFSET {offset_value}"
     return sql
 
@@ -611,7 +612,8 @@ class NyanSQLite:
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
-        rows = self._conn.execute(sql, tuple(values))
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
         return [self._from_row(model, meta, r) for r in rows]
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
@@ -660,7 +662,8 @@ class NyanSQLite:
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
-        rows = self._conn.execute(sql, tuple(values))
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
         return [
             {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
             for row in rows
@@ -713,7 +716,8 @@ class NyanSQLite:
             f'ORDER BY rank'
             + _limit_sql(limit, None)
         )
-        rows = self._conn.execute(sql, (query,))
+        with self._lock:
+            rows = self._conn.execute(sql, (query,))
         return [self._from_row(model, meta, r) for r in rows]
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
@@ -737,7 +741,8 @@ class NyanSQLite:
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
-        rows = self._conn.execute(sql, tuple(values))
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
         return rows[0]["n"] if rows else 0
 
     def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
@@ -758,7 +763,8 @@ class NyanSQLite:
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
-        rows = self._conn.execute(sql, tuple(values))
+        with self._lock:
+            rows = self._conn.execute(sql, tuple(values))
         return bool(rows)
 
     # ── MAINTENANCE ───────────────────────────────────────────────────── #

@@ -4,19 +4,21 @@ outline: [2, 3]
 
 # CHANGELOG
 
-## [1.1.4dev1] - 2026-06-06
+## [1.1.4] - 2026-06-22
 
 ### 🐞 Fixed
 - Hardened string filters so unsupported raw SQL fragments now raise `QueryValidationError` instead of being passed through to SQL.
 - Aligned async query validation with the sync implementation, including unknown-field checks and model-aware filter value serialization.
 - Fixed async filtering for `date`, `datetime`, `list`, and `dict` values.
 - Fixed `__in` handling so normal lists/tuples/sets work consistently and empty collections return no rows.
-- Added validation for negative or invalid `limit` / `offset` values.
+- Fixed offset-only pagination by emitting SQLite's required unlimited `LIMIT` clause.
+- Tightened `limit` / `offset` validation to reject negative values, floats, booleans, and strings.
 - Added a clear `TypeError` when `insert_many()` receives mixed model types.
-- Protected `vacuum()`, async `execute_raw()`, async `vacuum()`, and async `close()` with the existing connection locks.
+- Serialized reads and connection shutdown with the existing locks so `close()` cannot race active queries.
+- Protected `vacuum()` and async `execute_raw()` with the existing connection locks.
 
 ### 🧪 Tests
-- Added regression tests for unsafe string filters, async field validation, serialized filter values, `__in`, pagination bounds, and mixed-model bulk inserts.
+- Added regression tests for unsafe string filters, async field validation, serialized filter values, `__in`, offset-only pagination, strict pagination types, and mixed-model bulk inserts.
 
 ### 📚 Docs
 - Added an APSW full-access implementation plan.

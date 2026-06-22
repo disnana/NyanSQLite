@@ -178,6 +178,12 @@ async def test_async_filter_values_are_serialized():
 def test_sync_limit_offset_validation():
     db = NyanSQLite(":memory:")
     db.register(User)
+    db.insert_many([
+        User(id=1, name="Alice", age=20),
+        User(id=2, name="Bob", age=30),
+    ])
+
+    assert [user.id for user in db.query(User, offset=1, order_by="id")] == [2]
 
     with pytest.raises(QueryValidationError):
         db.query(User, limit=-1)
@@ -188,11 +194,23 @@ def test_sync_limit_offset_validation():
     with pytest.raises(QueryValidationError):
         db.query(User, limit="bad")
 
+    for invalid in (1.5, True, "1"):
+        with pytest.raises(QueryValidationError):
+            db.query(User, limit=invalid)
+        with pytest.raises(QueryValidationError):
+            db.query(User, offset=invalid)
+
 
 @pytest.mark.asyncio
 async def test_async_limit_offset_validation():
     db = NyanSQLiteAIO(":memory:")
     await db.register(User)
+    await db.insert_many([
+        User(id=1, name="Alice", age=20),
+        User(id=2, name="Bob", age=30),
+    ])
+
+    assert [user.id for user in await db.query(User, offset=1, order_by="id")] == [2]
 
     with pytest.raises(QueryValidationError):
         await db.query(User, limit=-1)
@@ -202,6 +220,12 @@ async def test_async_limit_offset_validation():
 
     with pytest.raises(QueryValidationError):
         await db.query(User, limit="bad")
+
+    for invalid in (1.5, True, "1"):
+        with pytest.raises(QueryValidationError):
+            await db.query(User, limit=invalid)
+        with pytest.raises(QueryValidationError):
+            await db.query(User, offset=invalid)
 
 
 def test_sync_insert_many_rejects_mixed_models():

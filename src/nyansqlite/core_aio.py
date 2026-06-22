@@ -4,6 +4,7 @@ import asyncio
 import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from numbers import Integral
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
@@ -207,20 +208,20 @@ def _order_sql(order_by: Optional[str], desc: bool) -> str:
 def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
     sql = ""
     if limit is not None:
-        try:
-            limit_value = int(limit)
-        except (TypeError, ValueError) as e:
-            raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}") from e
+        if isinstance(limit, bool) or not isinstance(limit, Integral):
+            raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}")
+        limit_value = int(limit)
         if limit_value < 0:
             raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}")
         sql += f" LIMIT {limit_value}"
     if offset is not None:
-        try:
-            offset_value = int(offset)
-        except (TypeError, ValueError) as e:
-            raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}") from e
+        if isinstance(offset, bool) or not isinstance(offset, Integral):
+            raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}")
+        offset_value = int(offset)
         if offset_value < 0:
             raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}")
+        if limit is None:
+            sql += " LIMIT -1"
         sql += f" OFFSET {offset_value}"
     return sql
 
@@ -634,7 +635,8 @@ class NyanSQLiteAIO:
             # Optimization: Pre-fetch all rows then parse
             return [self._from_row(model, meta, r) for r in rows]
 
-        return await asyncio.to_thread(_fetch_and_parse)
+        async with self._lock_context():
+            return await asyncio.to_thread(_fetch_and_parse)
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -694,7 +696,8 @@ class NyanSQLiteAIO:
                 {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
                 for row in rows
             ]
-        return await asyncio.to_thread(_fetch_and_deserialize)
+        async with self._lock_context():
+            return await asyncio.to_thread(_fetch_and_deserialize)
 
     # ── FTS5 SEARCH ───────────────────────────────────────────────────── #
 
@@ -745,7 +748,8 @@ class NyanSQLiteAIO:
         def _fetch_and_parse():
             rows = self._conn.execute(sql, (query,))
             return [self._from_row(model, meta, r) for r in rows]
-        return await asyncio.to_thread(_fetch_and_parse)
+        async with self._lock_context():
+            return await asyncio.to_thread(_fetch_and_parse)
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
@@ -769,10 +773,10 @@ class NyanSQLiteAIO:
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
 
-        # Remove async with self._lock
-        rows = await asyncio.to_thread(
-            lambda: self._conn.execute(sql, tuple(values))
-        )
+        async with self._lock_context():
+            rows = await asyncio.to_thread(
+                lambda: self._conn.execute(sql, tuple(values))
+            )
         return rows[0]["n"] if rows else 0
 
     async def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
@@ -795,10 +799,10 @@ class NyanSQLiteAIO:
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
 
-        # Remove async with self._lock
-        result = await asyncio.to_thread(
-            lambda: self._conn.execute(sql, tuple(values))
-        )
+        async with self._lock_context():
+            result = await asyncio.to_thread(
+                lambda: self._conn.execute(sql, tuple(values))
+            )
         return bool(result)
 
     # ── MAINTENANCE ───────────────────────────────────────────────────── #
