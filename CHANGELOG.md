@@ -3,6 +3,7 @@
 ## [1.1.4] - 2026-06-22
 
 ### 🐞 Fixed
+- Validated all generated SQLite identifiers and rejected unknown composite-index fields before constructing schema SQL.
 - Hardened string filters so unsupported raw SQL fragments now raise `QueryValidationError` instead of being passed through to SQL.
 - Aligned async query validation with the sync implementation, including unknown-field checks and model-aware filter value serialization.
 - Fixed async filtering for `date`, `datetime`, `list`, and `dict` values.
@@ -21,6 +22,7 @@
 
 ### ⚠️ Compatibility
 - String filters now support only simple comparisons such as `"age > 10"` or `"name = 'Alice'"`. Use keyword filters such as `age__gte=10` for advanced filtering.
+- Python 3.9 remains supported for the core package. Some optional and development dependencies cannot provide their latest security-fixed wheels on Python 3.9; use Python 3.10+ for the `speed`, `encryption`, and `dev` extras when processing untrusted input.
 
 ---
 
@@ -78,6 +80,7 @@
 ## [1.1.4] - 2026-06-22
 
 ### 🐞 修正
+- SQLite識別子をSQL生成前に検証し、複合インデックスに未知のフィールドが含まれる場合は拒否するようにしました。
 - 未対応の生SQL断片を文字列フィルタとして渡した場合、SQLへ素通しせず `QueryValidationError` を送出するようにしました。
 - 非同期版のクエリ検証を同期版と揃え、未知フィールド検証とモデル定義に基づくフィルタ値シリアライズを追加しました。
 - 非同期版で `date` / `datetime` / `list` / `dict` のフィルタが正しく動くようにしました。
@@ -96,6 +99,7 @@
 
 ### ⚠️ 互換性
 - 文字列フィルタは `"age > 10"` や `"name = 'Alice'"` のような単純比較のみサポートします。複雑な条件は `age__gte=10` のようなキーワードフィルタ、または明示的な raw SQL を使ってください。
+- コアパッケージのPython 3.9対応は維持します。ただし、一部の開発・オプション依存関係はPython 3.9向けに最新のセキュリティ修正版ホイールを提供していません。信頼できない入力を扱う場合、`speed`・`encryption`・`dev` extrasはPython 3.10以上で利用してください。
 
 ---
 

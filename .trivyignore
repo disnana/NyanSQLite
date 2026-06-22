@@ -1,0 +1,8 @@
+# Python 3.9-only resolutions retained for core compatibility.
+# The affected packages are optional/development dependencies; use Python 3.10+
+# for speed, encryption, and development extras with untrusted inputs.
+GHSA-537c-gmf6-5ccf
+CVE-2025-67221
+CVE-2025-68146
+CVE-2026-22701
+CVE-2025-71176

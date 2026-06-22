@@ -7,6 +7,7 @@ outline: [2, 3]
 ## [1.1.4] - 2026-06-22
 
 ### 🐞 Fixed
+- Validated all generated SQLite identifiers and rejected unknown composite-index fields before constructing schema SQL.
 - Hardened string filters so unsupported raw SQL fragments now raise `QueryValidationError` instead of being passed through to SQL.
 - Aligned async query validation with the sync implementation, including unknown-field checks and model-aware filter value serialization.
 - Fixed async filtering for `date`, `datetime`, `list`, and `dict` values.
@@ -25,6 +26,7 @@ outline: [2, 3]
 
 ### ⚠️ Compatibility
 - String filters now support only simple comparisons such as `"age > 10"` or `"name = 'Alice'"`. Use keyword filters such as `age__gte=10` for advanced filtering.
+- Python 3.9 remains supported for the core package. Some optional and development dependencies cannot provide their latest security-fixed wheels on Python 3.9; use Python 3.10+ for the `speed`, `encryption`, and `dev` extras when processing untrusted input.
 
 ---
 

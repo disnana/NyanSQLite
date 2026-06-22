@@ -3,7 +3,7 @@ from datetime import date, datetime
 import pytest
 from pydantic import BaseModel
 
-from nyansqlite import NyanSQLite, NyanSQLiteAIO
+from nyansqlite import CompositeIndex, NyanSQLite, NyanSQLiteAIO
 from nyansqlite.exceptions import FieldNotFoundError, QueryValidationError
 
 
@@ -24,6 +24,22 @@ class Event(BaseModel):
 class OtherUser(BaseModel):
     id: int
     nickname: str
+
+
+def test_schema_rejects_unsafe_identifiers_and_unknown_composite_fields():
+    UnsafeModel = type('User"; DROP TABLE user; --', (BaseModel,), {
+        "__annotations__": {"id": int},
+    })
+    db = NyanSQLite(":memory:")
+    with pytest.raises(ValueError, match="Invalid SQLite identifier"):
+        db.register(UnsafeModel)
+
+    class InvalidIndexModel(BaseModel):
+        id: int
+        __nyan_indexes__ = [CompositeIndex("missing")]
+
+    with pytest.raises(ValueError, match="unknown fields"):
+        db.register(InvalidIndexModel)
 
 def test_sync_query_validation_errors():
     db = NyanSQLite(":memory:")

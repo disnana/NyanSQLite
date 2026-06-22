@@ -1,0 +1,28 @@
+ignore:
+  # Python 3.9-only optional/development resolutions retained for compatibility.
+  # Python 3.10+ resolves patched versions.
+  - vulnerability: GHSA-537c-gmf6-5ccf
+    package:
+      name: cryptography
+      version: 47.0.0
+  - vulnerability: GHSA-hx9q-6w63-j58v
+    package:
+      name: orjson
+      version: 3.11.5
+  - vulnerability: GHSA-w853-jp5j-5j7f
+    package:
+      name: filelock
+      version: 3.19.1
+  - vulnerability: GHSA-qmgc-5h2g-mvrw
+    package:
+      name: filelock
+      version: 3.19.1
+  - vulnerability: GHSA-6w46-j5rx-g56g
+    package:
+      name: pytest
+      version: 8.4.2
+  # Upstream GitHub Action; no newer v1 release is currently selected here.
+  - vulnerability: GHSA-vxmw-7h4f-hqxh
+    package:
+      name: pypa/gh-action-pypi-publish
+      version: release/v1.14

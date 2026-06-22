@@ -421,7 +421,7 @@ class NyanSQLiteAIO:
         row  = self._to_row(obj, meta)
         cols = ", ".join(f'"{k}"' for k in row)
         ph   = ", ".join("?" * len(row))
-        sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'
+        sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'  # nosec B608
 
         async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
@@ -470,7 +470,7 @@ class NyanSQLiteAIO:
         meta_table = meta.table
         cols = ", ".join(f'"{k}"' for k in fields)
         ph = ", ".join("?" for _ in range(cols_count))
-        sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'
+        sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'  # nosec B608
 
         async with self._lock_context(): # Use write lock for the entire bulk operation
             def _bulk_insert_all():
@@ -525,7 +525,7 @@ class NyanSQLiteAIO:
             set_vals.append(serialize_value(value, meta.hints[fname]))
 
         where_clause, where_vals = _build_where((), where, model_meta=meta)
-        sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'
+        sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'  # nosec B608
 
         async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
@@ -553,7 +553,7 @@ class NyanSQLiteAIO:
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
-        sql = f'DELETE FROM "{meta.table}" {where_clause}'
+        sql = f'DELETE FROM "{meta.table}" {where_clause}'  # nosec B608
 
         async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
@@ -622,7 +622,7 @@ class NyanSQLiteAIO:
             meta.check_fields([order_by], model.__name__)
 
         sql = (
-            f'SELECT * FROM "{meta.table}" {where_clause}'
+            f'SELECT * FROM "{meta.table}" {where_clause}'  # nosec B608
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
@@ -684,7 +684,7 @@ class NyanSQLiteAIO:
         col_sql      = ", ".join(f'"{f}"' for f in fields)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql = (
-            f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'
+            f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'  # nosec B608
             + _order_sql(order_by, desc)
             + _limit_sql(limit, offset)
         )
@@ -737,7 +737,7 @@ class NyanSQLiteAIO:
         table = meta.table
         fts   = meta.fts_table
         sql = (
-            f'SELECT t.* FROM "{table}" t '
+            f'SELECT t.* FROM "{table}" t '  # nosec B608
             f'JOIN "{fts}" f ON t.rowid = f.rowid '
             f'WHERE "{fts}" MATCH ? '
             f'ORDER BY rank'
@@ -771,7 +771,7 @@ class NyanSQLiteAIO:
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
-        sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'
+        sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'  # nosec B608
 
         async with self._lock_context():
             rows = await asyncio.to_thread(
@@ -797,7 +797,7 @@ class NyanSQLiteAIO:
         """
         meta = self._meta(model)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
-        sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'
+        sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'  # nosec B608
 
         async with self._lock_context():
             result = await asyncio.to_thread(
@@ -822,7 +822,7 @@ class NyanSQLiteAIO:
         async with self._lock_context(): # Use write lock
             await asyncio.to_thread(
                 lambda: self._conn.execute(
-                    f'INSERT INTO "{meta.fts_table}"("{meta.fts_table}") VALUES(\'rebuild\')'
+                    f'INSERT INTO "{meta.fts_table}"("{meta.fts_table}") VALUES(\'rebuild\')'  # nosec B608
                 )
             )
 

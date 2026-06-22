@@ -15,9 +15,21 @@ from ._types import is_indexed, is_searchable, python_type_to_sqlite, resolve_ty
 
 # ── helpers ────────────────────────────────────────────────────────────── #
 
+_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def quote_identifier(identifier: str) -> str:
+    """Validate and quote an internally generated SQLite identifier."""
+    if not _IDENTIFIER_PATTERN.fullmatch(identifier):
+        raise ValueError(f"Invalid SQLite identifier: {identifier!r}")
+    return f'"{identifier}"'
+
+
 def model_to_table_name(model: type[BaseModel]) -> str:
     """``CamelCase`` → ``snake_case``."""
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", model.__name__).lower()
+    table = re.sub(r"(?<!^)(?=[A-Z])", "_", model.__name__).lower()
+    quote_identifier(table)
+    return table
 
 
 def get_primary_key(model: type[BaseModel]) -> Optional[str]:
@@ -41,6 +53,8 @@ def model_to_ddl(model: type[BaseModel]) -> str:
     table = model_to_table_name(model)
     pk    = get_primary_key(model)
     hints = model_hints(model)
+    for field_name in hints:
+        quote_identifier(field_name)
 
     columns: list[str] = []
     for field_name, annotation in hints.items():
@@ -84,6 +98,14 @@ def model_to_indexes(model: type[BaseModel]) -> list[str]:
     for ci in getattr(model, "__nyan_indexes__", []):
         if not isinstance(ci, CompositeIndex):
             continue
+        missing = [field for field in ci.fields if field not in hints]
+        if missing:
+            raise ValueError(
+                f"Composite index contains unknown fields {missing}; "
+                f"available fields: {list(hints)}"
+            )
+        for field in ci.fields:
+            quote_identifier(field)
         u       = "UNIQUE " if ci.unique else ""
         idx     = f'idx_{table}_{"_".join(ci.fields)}'
         col_sql = ", ".join(f'"{f}"' for f in ci.fields)
@@ -108,7 +130,7 @@ def model_to_fts5(model: type[BaseModel]) -> tuple[Optional[str], list[str]]:
     fts  = f"{table}_fts"
     cols = ", ".join(f'"{f}"' for f in s_fields)
 
-    create_fts = (
+    create_fts = (  # nosec B608 -- all identifiers are validated model metadata
         f'CREATE VIRTUAL TABLE IF NOT EXISTS "{fts}" USING fts5(\n'
         f"  {cols},\n"
         f'  content="{table}",\n'
@@ -122,7 +144,7 @@ def model_to_fts5(model: type[BaseModel]) -> tuple[Optional[str], list[str]]:
     triggers = [
         # INSERT
         (
-            f'CREATE TRIGGER IF NOT EXISTS "{table}_fts_ai"\n'
+            f'CREATE TRIGGER IF NOT EXISTS "{table}_fts_ai"\n'  # nosec B608
             f'  AFTER INSERT ON "{table}" BEGIN\n'
             f'    INSERT INTO "{fts}"(rowid, {cols})\n'
             f"    VALUES(new.rowid, {new_vals});\n"
@@ -130,7 +152,7 @@ def model_to_fts5(model: type[BaseModel]) -> tuple[Optional[str], list[str]]:
         ),
         # DELETE
         (
-            f'CREATE TRIGGER IF NOT EXISTS "{table}_fts_ad"\n'
+            f'CREATE TRIGGER IF NOT EXISTS "{table}_fts_ad"\n'  # nosec B608
             f'  AFTER DELETE ON "{table}" BEGIN\n'
             f'    INSERT INTO "{fts}"("{fts}", rowid, {cols})\n'
             f"    VALUES('delete', old.rowid, {old_vals});\n"
@@ -138,7 +160,7 @@ def model_to_fts5(model: type[BaseModel]) -> tuple[Optional[str], list[str]]:
         ),
         # UPDATE
         (
-            f'CREATE TRIGGER IF NOT EXISTS "{table}_fts_au"\n'
+            f'CREATE TRIGGER IF NOT EXISTS "{table}_fts_au"\n'  # nosec B608
             f'  AFTER UPDATE ON "{table}" BEGIN\n'
             f'    INSERT INTO "{fts}"("{fts}", rowid, {cols})\n'
             f"    VALUES('delete', old.rowid, {old_vals});\n"
