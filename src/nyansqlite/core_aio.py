@@ -278,14 +278,16 @@ class NyanSQLiteAIO:
         """
         self._conn     = NyanConnection(path, wal=wal)
         self._registry: dict[type[BaseModel], _Meta] = {}
-        self._write_lock = asyncio.Lock() # 書き込み専用ロック
-        self._lock_owner = None           # ロックを保持しているタスク
+        self._conn_lock = asyncio.Lock()   # SQLite接続への実アクセスを短く保護
+        self._write_lock = asyncio.Lock()  # 書き込みとトランザクション境界を保護
+        self._lock_owner = None            # ロックを保持しているタスク
         self._strict_deserialization = strict_deserialization
 
     @asynccontextmanager
-    async def _lock_context(self):
-        """リエントラント（再入可能）な非同期ロック。
-        Re-entrant async lock.
+    async def _write_context(self):
+        """リエントラントな書き込みロック。
+
+        書き込み系操作と明示的トランザクションの境界を保護します。
         """
         current_task = asyncio.current_task()
         if self._lock_owner == current_task:
@@ -298,6 +300,19 @@ class NyanSQLiteAIO:
                 yield
             finally:
                 self._lock_owner = None
+
+    async def _run_db_call(self, fn: Any) -> Any:
+        """Run a SQLite call under the connection lock.
+
+        SQLite access itself stays serialized for safety, while model
+        deserialization can happen outside this lock.
+        """
+        current_task = asyncio.current_task()
+        if self._write_lock.locked() and self._lock_owner != current_task:
+            async with self._write_lock:
+                pass
+        async with self._conn_lock:
+            return await asyncio.to_thread(fn)
 
     # ── registration ─────────────────────────────────────────────────── #
 
@@ -328,27 +343,26 @@ class NyanSQLiteAIO:
                     f"Use explicit __tablename__ override or rename one of the models."
                 )
 
-        async with self._lock_context(): # Use write lock for registration
-            await asyncio.to_thread(
-                lambda: (
-                    self._conn.execute(model_to_ddl(model)),
-                    [self._conn.execute(idx_sql) for idx_sql in model_to_indexes(model)],
-                )
-            )
+        fts_create, fts_triggers = model_to_fts5(model)
+        fts_table:  str | None = None
+        fts_fields: list[str]  = []
+        if fts_create:
+            from ._types import is_searchable
+            fts_table  = f"{table}_fts"
+            fts_fields = [f for f, ann in hints.items() if is_searchable(ann)]
 
-            fts_create, fts_triggers = model_to_fts5(model)
-            fts_table:  str | None = None
-            fts_fields: list[str]  = []
-            if fts_create:
-                await asyncio.to_thread(
-                    lambda: (
-                        self._conn.execute(fts_create),
-                        [self._conn.execute(trig) for trig in fts_triggers],
-                    )
-                )
-                from ._types import is_searchable
-                fts_table  = f"{table}_fts"
-                fts_fields = [f for f, ann in hints.items() if is_searchable(ann)]
+        async with self._write_context():
+            def _register_all() -> None:
+                with self._conn.transaction():
+                    self._conn.execute(model_to_ddl(model))
+                    for idx_sql in model_to_indexes(model):
+                        self._conn.execute(idx_sql)
+                    if fts_create:
+                        self._conn.execute(fts_create)
+                        for trig in fts_triggers:
+                            self._conn.execute(trig)
+
+            await self._run_db_call(_register_all)
 
         self._registry[model] = _Meta(
             table=table, pk=pk, hints=hints,
@@ -423,11 +437,9 @@ class NyanSQLiteAIO:
         ph   = ", ".join("?" * len(row))
         sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'  # nosec B608
 
-        async with self._lock_context(): # Use write lock
-            await asyncio.to_thread(
-                lambda: (
-                    self._conn.execute(sql, tuple(row.values())),
-                )
+        async with self._write_context():
+            await self._run_db_call(
+                lambda: self._conn.execute(sql, tuple(row.values()))
             )
         return obj
 
@@ -472,19 +484,14 @@ class NyanSQLiteAIO:
         ph = ", ".join("?" for _ in range(cols_count))
         sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'  # nosec B608
 
-        async with self._lock_context(): # Use write lock for the entire bulk operation
+        async with self._write_context():
             def _bulk_insert_all():
-                self._conn.execute("BEGIN TRANSACTION")
-                try:
+                with self._conn.transaction():
                     for chunk_start in range(0, len(rows), chunk_size):
                         chunk = rows[chunk_start:chunk_start + chunk_size]
                         self._conn.executemany(sql, chunk)
-                    self._conn.execute("COMMIT")
-                except Exception:
-                    self._conn.execute("ROLLBACK")
-                    raise
 
-            await asyncio.to_thread(_bulk_insert_all)
+            await self._run_db_call(_bulk_insert_all)
             total_inserted = len(rows)
 
         return total_inserted
@@ -527,11 +534,10 @@ class NyanSQLiteAIO:
         where_clause, where_vals = _build_where((), where, model_meta=meta)
         sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'  # nosec B608
 
-        async with self._lock_context(): # Use write lock
-            await asyncio.to_thread(
-                lambda: self._conn.execute(sql, tuple(set_vals + where_vals))
+        async with self._write_context():
+            return await self._run_db_call(
+                lambda: self._execute_and_return_changes(sql, tuple(set_vals + where_vals))
             )
-            return await asyncio.to_thread(lambda: self._conn.changes())
 
     # ── DELETE ───────────────────────────────────────────────────────── #
 
@@ -555,11 +561,10 @@ class NyanSQLiteAIO:
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql = f'DELETE FROM "{meta.table}" {where_clause}'  # nosec B608
 
-        async with self._lock_context(): # Use write lock
-            await asyncio.to_thread(
-                lambda: self._conn.execute(sql, tuple(values))
+        async with self._write_context():
+            return await self._run_db_call(
+                lambda: self._execute_and_return_changes(sql, tuple(values))
             )
-            return await asyncio.to_thread(lambda: self._conn.changes())
 
     # ── GET / QUERY ───────────────────────────────────────────────────── #
 
@@ -635,8 +640,8 @@ class NyanSQLiteAIO:
             # Optimization: Pre-fetch all rows then parse
             return [self._from_row(model, meta, r) for r in rows]
 
-        async with self._lock_context():
-            return await asyncio.to_thread(_fetch_and_parse)
+        rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values)))
+        return [self._from_row(model, meta, r) for r in rows]
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -689,15 +694,11 @@ class NyanSQLiteAIO:
             + _limit_sql(limit, offset)
         )
 
-        # Optimization: move fetching and deserialization into a single thread call
-        def _fetch_and_deserialize():
-            rows = self._conn.execute(sql, tuple(values))
-            return [
-                {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
-                for row in rows
-            ]
-        async with self._lock_context():
-            return await asyncio.to_thread(_fetch_and_deserialize)
+        rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values)))
+        return [
+            {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
+            for row in rows
+        ]
 
     # ── FTS5 SEARCH ───────────────────────────────────────────────────── #
 
@@ -744,12 +745,8 @@ class NyanSQLiteAIO:
             + _limit_sql(limit, None)
         )
 
-        # Optimization: move fetching and parsing into a single thread call
-        def _fetch_and_parse():
-            rows = self._conn.execute(sql, (query,))
-            return [self._from_row(model, meta, r) for r in rows]
-        async with self._lock_context():
-            return await asyncio.to_thread(_fetch_and_parse)
+        rows = await self._run_db_call(lambda: self._conn.execute(sql, (query,)))
+        return [self._from_row(model, meta, r) for r in rows]
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
@@ -773,10 +770,7 @@ class NyanSQLiteAIO:
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'  # nosec B608
 
-        async with self._lock_context():
-            rows = await asyncio.to_thread(
-                lambda: self._conn.execute(sql, tuple(values))
-            )
+        rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values)))
         return rows[0]["n"] if rows else 0
 
     async def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool:
@@ -799,10 +793,7 @@ class NyanSQLiteAIO:
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'  # nosec B608
 
-        async with self._lock_context():
-            result = await asyncio.to_thread(
-                lambda: self._conn.execute(sql, tuple(values))
-            )
+        result = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values)))
         return bool(result)
 
     # ── MAINTENANCE ───────────────────────────────────────────────────── #
@@ -819,8 +810,8 @@ class NyanSQLiteAIO:
         if not meta.fts_table:
             return
 
-        async with self._lock_context(): # Use write lock
-            await asyncio.to_thread(
+        async with self._write_context():
+            await self._run_db_call(
                 lambda: self._conn.execute(
                     f'INSERT INTO "{meta.fts_table}"("{meta.fts_table}") VALUES(\'rebuild\')'  # nosec B608
                 )
@@ -830,8 +821,8 @@ class NyanSQLiteAIO:
         """データベースを VACUUM してディスク領域を解放します。
         VACUUM the database to reclaim disk space.
         """
-        async with self._lock_context():
-            await asyncio.to_thread(lambda: self._conn.execute("VACUUM"))
+        async with self._write_context():
+            await self._run_db_call(lambda: self._conn.execute("VACUUM"))
 
     # ── RAW SQL ───────────────────────────────────────────────────────── #
 
@@ -849,8 +840,7 @@ class NyanSQLiteAIO:
             list[dict[str, Any]]: 結果行のリスト（各行は辞書）。
                                  List of result rows as dicts.
         """
-        async with self._lock_context():
-            return await asyncio.to_thread(lambda: self._conn.execute(sql, params))
+        return await self._run_db_call(lambda: self._conn.execute(sql, params))
 
     @asynccontextmanager
     async def atomic(self) -> AsyncGenerator[None, None]:
@@ -865,19 +855,19 @@ class NyanSQLiteAIO:
             >>>     await db.insert(User(id=1, name="Taro"))
             >>>     # Raise error to rollback
         """
-        async with self._lock_context():
+        async with self._write_context():
             # Implementation: Start transaction, yield, then commit/rollback
-            in_tx_already = await asyncio.to_thread(self._conn.in_transaction)
+            in_tx_already = await self._run_db_call(self._conn.in_transaction)
 
             if not in_tx_already:
-                await asyncio.to_thread(lambda: self._conn._raw("BEGIN"))
+                await self._run_db_call(lambda: self._conn._raw("BEGIN"))
             try:
                 yield
                 if not in_tx_already:
-                    await asyncio.to_thread(lambda: self._conn._raw("COMMIT"))
+                    await self._run_db_call(lambda: self._conn._raw("COMMIT"))
             except Exception:
                 if not in_tx_already:
-                    await asyncio.to_thread(lambda: self._conn._raw("ROLLBACK"))
+                    await self._run_db_call(lambda: self._conn._raw("ROLLBACK"))
                 raise
 
     # ── context manager + info ────────────────────────────────────────── #
@@ -892,8 +882,8 @@ class NyanSQLiteAIO:
         """データベース接続を閉じます。
         Close the underlying database connection.
         """
-        async with self._lock_context():
-            await asyncio.to_thread(lambda: self._conn.close())
+        async with self._write_context():
+            await self._run_db_call(lambda: self._conn.close())
 
     @property
     def backend(self) -> str:
@@ -911,3 +901,7 @@ class NyanSQLiteAIO:
                        List of model names.
         """
         return [m.__name__ for m in self._registry]
+
+    def _execute_and_return_changes(self, sql: str, params: tuple[Any, ...]) -> int:
+        self._conn.execute(sql, params)
+        return self._conn.changes()

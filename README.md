@@ -129,7 +129,8 @@ from datetime import datetime
 from pydantic import BaseModel
 
 class Player(BaseModel):
-    player_id: int                    # 主キー
+    __nyan_primary_key__ = "player_id"
+    player_id: int                    # 明示的に主キーとして扱う
     username: Indexed[str]            # ユーザー名でインデックス
     level: Indexed[int]               # レベルでインデックス
     score: int = 0
@@ -202,7 +203,7 @@ for t in threads: t.join()
 
 #### 非同期サポート (`asyncio`)
 
-`NyanSQLiteAIO` クラスを使用することで、非同期プログラミング（`asyncio`）を完全にサポートします。内部的には `asyncio.to_thread` を活用し、DB操作をスレッドセーフかつノンブロッキングに実行します。
+`NyanSQLiteAIO` クラスを使用することで、非同期プログラミング（`asyncio`）をサポートします。内部的には `asyncio.to_thread` を活用し、SQLite へのアクセスは安全に直列化しつつ、行の変換処理はできるだけロック外で進めます。
 
 ```python
 import asyncio
@@ -217,7 +218,7 @@ async def main():
     # 1. 非同期コンテキストマネージャによる接続
     async with NyanSQLiteAIO("async.db") as db:
         # 2. モデルの登録（初回のみテーブル作成）
-        db.register(User)
+        await db.register(User)
         
         # 3. 非同期挿入
         # 内部でスレッドセーフに実行されます
@@ -328,7 +329,7 @@ class Order(BaseModel):
 
 #### 主キーのカスタマイズ
 
-フィールド名が `id` でない場合：
+`id` フィールドは自動的に主キーとして扱われます。別名の主キーを使いたい場合は、`__nyan_primary_key__` を明示してください：
 
 ```python
 class User(BaseModel):
@@ -504,7 +505,7 @@ for t in threads: t.join()
 
 #### Asynchronous Support (`asyncio`)
 
-NyanSQLite provides full support for `asyncio` via the `NyanSQLiteAIO` class. It uses `asyncio.to_thread` internally to keep operations non-blocking and thread-safe.
+NyanSQLite provides `asyncio` support via the `NyanSQLiteAIO` class. It uses `asyncio.to_thread` internally, keeps SQLite access serialized for safety, and moves row parsing outside that critical section whenever possible.
 
 ```python
 import asyncio
@@ -519,7 +520,7 @@ async def main():
     # 1. Connection via async context manager
     async with NyanSQLiteAIO("async.db") as db:
         # 2. Register models
-        db.register(User)
+        await db.register(User)
         
         # 3. Async Insert
         await db.insert(User(id=1, name="alice"))

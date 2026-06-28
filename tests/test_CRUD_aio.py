@@ -306,3 +306,71 @@ async def test_context_manager_close():
             await asyncio.to_thread(db_path.unlink)
         except PermissionError as exc:
             warnings.warn(f"Cleanup skipped: could not remove {db_path}: {exc!r}", stacklevel=2)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_reads_do_not_wait_for_row_parsing(db, monkeypatch):
+    await db.insert_many([
+        User(id=i, name=f"User{i}", age=20 + i)
+        for i in range(1, 6)
+    ])
+
+    original_execute = db._conn.execute
+    original_from_row = db._from_row
+    parse_started = asyncio.Event()
+    second_execute_started = asyncio.Event()
+    select_calls = 0
+    loop = asyncio.get_running_loop()
+
+    def wrapped_execute(sql, params=()):
+        nonlocal select_calls
+        if sql.startswith('SELECT * FROM "user"'):
+            select_calls += 1
+            if select_calls == 2:
+                loop.call_soon_threadsafe(second_execute_started.set)
+        return original_execute(sql, params)
+
+    def slow_from_row(model, meta, row):
+        if not parse_started.is_set():
+            loop.call_soon_threadsafe(parse_started.set)
+        import time
+        time.sleep(0.05)
+        return original_from_row(model, meta, row)
+
+    monkeypatch.setattr(db._conn, "execute", wrapped_execute)
+    monkeypatch.setattr(db, "_from_row", slow_from_row)
+
+    first_query = asyncio.create_task(db.query(User, order_by="id"))
+    await asyncio.wait_for(parse_started.wait(), timeout=1.0)
+
+    second_query = asyncio.create_task(db.query(User, order_by="id"))
+    await asyncio.wait_for(second_execute_started.wait(), timeout=0.2)
+
+    first_rows, second_rows = await asyncio.gather(first_query, second_query)
+    assert [row.id for row in first_rows] == [1, 2, 3, 4, 5]
+    assert [row.id for row in second_rows] == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_register_is_atomic_on_failure(base_db_aio, monkeypatch):
+    class BrokenArticle(BaseModel):
+        id: int
+        title: str
+
+    def broken_fts(_model):
+        return (
+            'CREATE VIRTUAL TABLE IF NOT EXISTS "broken_article_fts" USING fts5("title", content="broken_article", content_rowid="rowid")',
+            ['CREATE TRIGGER "broken_article_fts_ai" AFTER INSERT ON "broken_article" BEGIN THIS IS INVALID; END'],
+        )
+
+    monkeypatch.setattr("nyansqlite.core_aio.model_to_fts5", broken_fts)
+
+    with pytest.raises(Exception):
+        await base_db_aio.register(BrokenArticle)
+
+    tables = await base_db_aio.execute_raw(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)",
+        ("broken_article", "broken_article_fts"),
+    )
+    assert tables == []
+    assert "BrokenArticle" not in base_db_aio.registered_models()
