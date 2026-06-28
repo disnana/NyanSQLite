@@ -305,7 +305,7 @@ try:
     db.register(User_Auth)  # TableNameCollisionError が発生
 except TableNameCollisionError as e:
     print(f"Collision detected: {e}")
-    # 解決策：__nyan_primary_key__ で明示的にテーブル名を指定
+    # 解決策：モデル名を変更して衝突を避ける
 ```
 
 ### 🛠️ 高度な機能

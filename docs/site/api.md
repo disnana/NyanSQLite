@@ -20,37 +20,13 @@ PydanticネイティブなSQLiteラッパー。
 class NyanSQLiteAIO(path: str = ':memory:', wal: bool = True, strict_deserialization: bool = False)
 ```
 
-`NyanSQLite` の非同期版。 `asyncio` を使用したノンブロッキングなデータベース操作を提供します。
+`NyanSQLite` の非同期版です。
 
-内部で `asyncio.to_thread` を使用し、スレッドセーフなアクセスを維持しつつ、イベントループをブロックしません。
-メソッドのほとんどが `async` で定義されており、呼び出し時に `await` が必要です。
+内部では `asyncio.to_thread` を使って SQLite 操作をイベントループ外で実行しつつ、接続アクセスを安全に保護します。
+書き込み系操作は排他的に処理され、読み取り系は接続ロックの保持時間を短く保つよう実装されています。
+ほとんどのメソッドは `async` で定義されているため、呼び出し時に `await` が必要です。
 
-基本的な機能は `NyanSQLite` と共通です。詳細は [非同期サポート](./async) を参照してください。
-
-    自動的なスキーマ作成、B-treeインデックス、FTS5全文検索、
-    部分的な読み書き、および高度なクエリ演算子をサポートします。
-    バックエンドには高速な `apsw` を使用しています。
-
-    Pydantic-native SQLite wrapper.
-    Supports automatic schema creation, B-tree indexes, FTS5 full-text search,
-    Powered by the high-performance `apsw` backend.
-
-    Quick start::
-
-        class Article(BaseModel):
-            id:      int
-            author:  Indexed[str]
-            title:   Searchable[str]
-            body:    Searchable[str]
-            views:   int = 0
-
-        db = NyanSQLite("blog.sqlite")
-        db.register(Article)
-
-        db.insert(Article(id=1, author="neko", title="Hello SQLite", body="…"))
-        db.search(Article, "SQLite")
-        db.update(Article, where={"id": 1}, views=42)
-        db.select(Article, fields=["title", "views"], author="neko")
+詳細は [非同期サポート](./async) を参照してください。
 
 NyanSQLiteを初期化します。
 
@@ -58,9 +34,9 @@ NyanSQLiteを初期化します。
 
 | 引数名 | 型 | 説明 |
 |---|---|---|
-| `path` | `str` | データベースファイルのパス。デフォルトはメモリ内データベース (":memory:")。 Database file path. Defaults to in-memory (":memory:"). |
-| `wal` | `bool` | WAL (Write-Ahead Logging) モードを有効にするかどうか。デフォルトは True。 Whether to enable WAL (Write-Ahead Logging) mode. Defaults to True. |
-| `strict_deserialization` | `bool` | デシリアライズ時に厳密なチェックを行うかどうか。 Trueの場合、不正なデータに対して ValueError を発生させます。 Falseの場合、警告を出して生の値を返します。 |
+| `path` | `str` | データベースファイルのパス。デフォルトは `":memory:"` です。 |
+| `wal` | `bool` | WAL (Write-Ahead Logging) モードを有効にするかどうか。デフォルトは `True` です。 |
+| `strict_deserialization` | `bool` | デシリアライズ時に厳密なチェックを行うかどうか。`True` の場合は不正データで例外を投げ、`False` の場合は警告を出して生の値を返します。 |
 
 
 

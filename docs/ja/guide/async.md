@@ -1,34 +1,47 @@
-﻿# 非同期サポートについて（計画中）
+# 非同期サポート (`NyanSQLiteAIO`)
 
-現在、NyanSQLite v1.0.x 系では、非同期（async/await）のネイティブサポートは含まれていません。
+現在の NyanSQLite では、`asyncio` 向けに `NyanSQLiteAIO` を利用できます。
 
-## 現在の状況
+## 現在の挙動
 
-現在の `NyanSQLite` クラスは同期的な操作（ブロッキングI/O）を基本として設計されています。
-データベース操作は `threading.Lock` によってスレッドセーフに保たれていますが、`asyncio` イベントループを直接考慮した設計にはなっていません。
+`NyanSQLiteAIO` は `asyncio.to_thread()` を使って SQLite 操作をイベントループ外で実行します。
 
-### 非同期環境での暫定的な使用方法
+1. **安全な接続アクセス**: SQLite 接続へのアクセス自体は直列化し、接続の一貫性を保ちます。
+2. **書き込みの排他制御**: `insert`, `update`, `delete`, `atomic()` などの書き込み系は非同期ロックで保護されます。
+3. **読み取りの待ち時間を削減**: クエリ結果の Pydantic 変換は、できるだけ接続ロックの外で進めます。
 
-FastAPI などの非同期フレームワークで NyanSQLite を使用する場合、ブロッキング操作を避けるために `run_in_executor` などを使用して同期メソッドを呼び出す必要があります。
+## 基本的な使い方
 
 ```python
 import asyncio
-from nyansqlite import NyanSQLite
+from pydantic import BaseModel
+from nyansqlite import Indexed, NyanSQLiteAIO
 
-db = NyanSQLite("app.db")
 
-async def get_article(article_id: int):
-    loop = asyncio.get_running_loop()
-    # 同期メソッドをエグゼキュータで実行
-    return await loop.run_in_executor(None, db.get, Article, id=article_id)
+class Article(BaseModel):
+    id: int
+    title: str
+    author: Indexed[str]
+
+
+async def main():
+    async with NyanSQLiteAIO("app.db") as db:
+        await db.register(Article)
+        await db.insert(Article(id=1, title="Hello", author="neko"))
+
+        article = await db.get(Article, id=1)
+        print(article.title)
+
+        rows = await db.query(Article, author="neko", order_by="id")
+        print(len(rows))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-## ロードマップ
+## メモ
 
-将来のバージョンでは、以下の機能を含むネイティブな非同期サポート（`AsyncNyanSQLite`）の導入を検討しています：
-
-1. **専用スレッドプール**: データベース操作をバックグラウンドスレッドで実行し、イベントループをブロックしない。
-2. **非同期クエリ API**: `await db.query(...)` のような直感的な非同期インターフェース。
-3. **接続プール**: 非同期環境での効率的な接続管理。
-
-非同期サポートに関する進捗や要望がある場合は、GitHubのリポジトリにてお知らせください。
+- `register()` を含め、ほとんどの操作は `await` が必要です。
+- `async with db.atomic():` を使うと、複数の書き込みを1つのトランザクションとして扱えます。
+- 同期版 `NyanSQLite` を `run_in_executor()` で包むより、基本的には `NyanSQLiteAIO` を使う方が素直です。

@@ -20,45 +20,21 @@ Pydantic-native SQLite wrapper.
 class NyanSQLiteAIO(path: str = ':memory:', wal: bool = True, strict_deserialization: bool = False)
 ```
 
-Asynchronous version of `NyanSQLite`. Provides non-blocking database operations using `asyncio`.
+Asynchronous version of `NyanSQLite`.
 
-It uses `asyncio.to_thread` internally to maintain thread-safe access without blocking the event loop.
-Most methods are defined as `async` and require `await` when called.
+It uses `asyncio.to_thread` to run SQLite work off the event loop while protecting access to the shared connection.
+Write operations are handled exclusively, and read operations are implemented to keep connection-lock hold times short.
+Most methods are `async` and require `await` when called.
 
-Core functionality is identical to `NyanSQLite`. See [Async Support](./async) for details.
-    Supports automatic schema creation, B-tree indexes, FTS5 full-text search,
-    partial reads/writes, and advanced query operators.
-    Powered by the high-performance `apsw` backend.
-
-    Quick start::
-
-        from nyansqlite import NyanSQLite, Indexed, Searchable
-        from pydantic import BaseModel
-
-        class Article(BaseModel):
-            id:      int
-            author:  Indexed[str]
-            title:   Searchable[str]
-            body:    Searchable[str]
-            views:   int = 0
-
-        db = NyanSQLite("blog.sqlite")
-        db.register(Article)
-
-        db.insert(Article(id=1, author="neko", title="Hello SQLite", body="…"))
-        db.search(Article, "SQLite")
-        db.update(Article, where={"id": 1}, views=42)
-        db.select(Article, fields=["title", "views"], author="neko")
-
-        Initialize NyanSQLite.
+See [Async Support](./async) for usage details.
 
 #### Parameter
 
 | Parameter | Type | Description |
 |---|---|---|
-| `path` | `str` | memory:"). |
-| `wal` | `bool` |  |
-| `strict_deserialization` | `bool` |  |
+| `path` | `str` | Database file path. Defaults to `":memory:"`. |
+| `wal` | `bool` | Whether to enable WAL (Write-Ahead Logging) mode. Defaults to `True`. |
+| `strict_deserialization` | `bool` | If `True`, raise on malformed stored data during deserialization. If `False`, emit a warning and return the raw value. |
 
 
 
