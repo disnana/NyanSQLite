@@ -13,6 +13,7 @@ outline: [2, 3]
 - Removed unused JSON conversion in `__in` filters. Building 500 filters of 1,000 integers fell from 0.138 to 0.091 seconds locally.
 
 ### 🐞 Fixed
+- Updated documentation dependencies to address known vulnerabilities and limited the optional `cryptography` dependency to a fixed release on Python 3.10+.
 - Protected in-flight SQLite calls after async cancellation and rolled back open transactions; sync transactions also roll back on interruptions.
 - `update()` now validates changed values, with affected-row validation for models that have custom validators or configuration.
 - `register()` now raises `SchemaMismatchError` when an existing table's columns, types, primary key, nullability, or FTS searchable columns differ from the model.
@@ -22,6 +23,7 @@ outline: [2, 3]
 - Corrected the error and exception guides, backup example, projection advice, batched async reads, and continuation-based pagination.
 
 ### ⚠️ Compatibility
+- On Python 3.9, the `encryption`, `all`, and `dev` extras no longer install `cryptography`. Core Python 3.9 support remains.
 - Invalid partial updates now raise Pydantic `ValidationError`. Incompatible existing tables raise `SchemaMismatchError` on registration; migrate them explicitly.
 
 ---

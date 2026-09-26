@@ -1,6 +1,8 @@
 # Encryption Guide (Planned)
 
-Currently, NyanSQLite v1.0.x does not include native support for transparent database encryption.
+NyanSQLite 1.1.5 does not include native support for transparent database encryption.
+
+Use Python 3.10+ and `nyansqlite[encryption]` for the application-side example below. On Python 3.9, this extra does not install `cryptography`.
 
 ## Current Status
 
