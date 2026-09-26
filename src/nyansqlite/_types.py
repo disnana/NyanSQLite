@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import sys
 from datetime import date, datetime
-from typing import Any, Union, get_args, get_origin
+from functools import lru_cache
+from typing import Any, Callable, Union, get_args, get_origin
 
 try:
     from typing import Annotated  # 3.9+
@@ -89,6 +90,12 @@ def resolve_type(annotation: Any, _depth: int = 0, _max_depth: int = 10) -> tupl
     return inner, False
 
 
+@lru_cache(maxsize=512)
+def _deserialization_base(annotation: Any) -> Any:
+    """Resolve stable model annotations once for repeated row decoding."""
+    return resolve_type(annotation)[0]
+
+
 def _is_union_type(tp: Any) -> bool:
     import types
     return isinstance(tp, getattr(types, "UnionType", type(None)))
@@ -166,7 +173,15 @@ def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
     """
     if value is None:
         return None
-    base, _ = resolve_type(annotation)
+    if annotation is str or annotation is int or annotation is float or annotation is bytes:
+        return value
+    try:
+        base = _deserialization_base(annotation)
+    except TypeError:
+        # Annotated metadata can be unhashable; keep those annotations usable.
+        base = resolve_type(annotation)[0]
+    if base is str or base is int or base is float or base is bytes:
+        return value
     origin = get_origin(base)
 
     if base is bool:
@@ -225,3 +240,41 @@ def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
             )
             return value
     return value
+
+
+def compile_deserializer(annotation: Any, strict: bool = False) -> Callable[[Any], Any]:
+    """Prepare the common SQLite-to-Python conversion once per model field."""
+    base = resolve_type(annotation)[0]
+
+    if base in (str, int, float, bytes):
+        return lambda value: value
+    if base is bool:
+        return lambda value: None if value is None else bool(value)
+    if get_origin(base) in (dict, list) or base in (dict, list):
+        def decode_json(value: Any) -> Any:
+            if not isinstance(value, str):
+                return value
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                return deserialize_value(value, annotation, strict)
+        return decode_json
+    if base is datetime:
+        def decode_datetime(value: Any) -> Any:
+            if value is None:
+                return None
+            try:
+                return datetime.fromisoformat(value)
+            except (ValueError, TypeError, AttributeError):
+                return deserialize_value(value, annotation, strict)
+        return decode_datetime
+    if base is date:
+        def decode_date(value: Any) -> Any:
+            if value is None:
+                return None
+            try:
+                return date.fromisoformat(value)
+            except (ValueError, TypeError, AttributeError):
+                return deserialize_value(value, annotation, strict)
+        return decode_date
+    return lambda value: deserialize_value(value, annotation, strict)

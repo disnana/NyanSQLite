@@ -1,10 +1,12 @@
 from datetime import date, datetime
+from typing import Annotated
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError, create_model, model_validator
 
-from nyansqlite import CompositeIndex, NyanSQLite, NyanSQLiteAIO
-from nyansqlite.exceptions import FieldNotFoundError, QueryValidationError
+from nyansqlite import CompositeIndex, NyanSQLite, NyanSQLiteAIO, Searchable
+from nyansqlite._types import compile_deserializer, deserialize_value
+from nyansqlite.exceptions import FieldNotFoundError, QueryValidationError, SchemaMismatchError
 
 
 class User(BaseModel):
@@ -24,6 +26,180 @@ class Event(BaseModel):
 class OtherUser(BaseModel):
     id: int
     nickname: str
+
+
+class Interval(BaseModel):
+    id: int
+    start: int
+    end: int
+
+    @model_validator(mode="after")
+    def valid_range(self):
+        if self.start > self.end:
+            raise ValueError("start must not exceed end")
+        return self
+
+
+def test_deserialize_unhashable_annotated_metadata():
+    annotation = Annotated[list[str], {"tag": []}]
+    assert deserialize_value('["a", "b"]', annotation) == ["a", "b"]
+    assert compile_deserializer(annotation)('["a", "b"]') == ["a", "b"]
+
+
+@pytest.mark.parametrize(
+    ("annotation", "value"),
+    [
+        (int, 12), (str, "hello"), (bool, 1), (list[str], '["a", "b"]'),
+        (dict[str, int], '{"a": 1}'), (datetime, "2026-01-02T03:04:05"),
+        (date, "2026-01-02"), (list[str], None), (datetime, None),
+        (list[str], ["already decoded"]),
+    ],
+)
+def test_compiled_deserializer_matches_direct_conversion(annotation, value):
+    assert compile_deserializer(annotation)(value) == deserialize_value(value, annotation)
+
+
+@pytest.mark.parametrize("annotation,value", [
+    (list[str], "not json"), (datetime, "not a date"), (date, "not a date"),
+])
+def test_compiled_deserializer_preserves_invalid_value_handling(annotation, value):
+    with pytest.warns(RuntimeWarning):
+        direct = deserialize_value(value, annotation)
+    with pytest.warns(RuntimeWarning):
+        compiled = compile_deserializer(annotation)(value)
+    assert compiled == direct
+    with pytest.raises(ValueError) as direct_error:
+        deserialize_value(value, annotation, strict=True)
+    with pytest.raises(ValueError) as compiled_error:
+        compile_deserializer(annotation, strict=True)(value)
+    assert str(compiled_error.value) == str(direct_error.value)
+
+
+def test_sync_update_validates_all_affected_rows():
+    with NyanSQLite(":memory:") as db:
+        db.register(User)
+        db.insert(User(id=1, name="Alice", age=20))
+        with pytest.raises(ValidationError):
+            db.update(User, where={"id": 1}, age="invalid")
+        assert db.get(User, id=1).age == 20
+
+        db.register(Interval)
+        db.insert_many([Interval(id=1, start=1, end=10), Interval(id=2, start=10, end=20)])
+        with pytest.raises(ValidationError):
+            db.update(Interval, where={}, end=5)
+        assert [row.end for row in db.query(Interval, order_by="id")] == [10, 20]
+
+        class Positive(BaseModel):
+            id: int
+            value: int = Field(gt=0)
+
+        db.register(Positive)
+        db.insert(Positive(id=1, value=1))
+        with pytest.raises(ValidationError):
+            db.update(Positive, where={"id": 1}, value=0)
+        assert db.get(Positive, id=1).value == 1
+
+
+@pytest.mark.asyncio
+async def test_async_update_validates_all_affected_rows():
+    async with NyanSQLiteAIO(":memory:") as db:
+        await db.register(User)
+        await db.insert(User(id=1, name="Alice", age=20))
+        with pytest.raises(ValidationError):
+            await db.update(User, where={"id": 1}, age="invalid")
+        assert (await db.get(User, id=1)).age == 20
+
+        await db.register(Interval)
+        await db.insert_many([Interval(id=1, start=1, end=10), Interval(id=2, start=10, end=20)])
+        with pytest.raises(ValidationError):
+            await db.update(Interval, where={}, end=5)
+        assert [row.end for row in await db.query(Interval, order_by="id")] == [10, 20]
+
+
+def test_sync_register_rejects_schema_drift(tmp_path):
+    path = str(tmp_path / "schema.db")
+    old_model = create_model("Record", id=(int, ...), name=(str, ...))
+    new_model = create_model("Record", id=(int, ...), name=(str, ...), email=(str, ...))
+    with NyanSQLite(path) as db:
+        db.register(old_model)
+    with NyanSQLite(path) as db:
+        with pytest.raises(SchemaMismatchError, match="missing columns=.*email"):
+            db.register(new_model)
+        assert db.registered_models() == []
+        db.register(old_model)
+    changed_type = create_model("Record", id=(int, ...), name=(int, ...))
+    with NyanSQLite(path) as db:
+        with pytest.raises(SchemaMismatchError, match="incompatible columns=.*name"):
+            db.register(changed_type)
+
+
+def test_sync_register_rejects_fts_drift(tmp_path):
+    path = str(tmp_path / "fts_schema.db")
+    old_model = create_model("Article", id=(int, ...), title=(Searchable[str], ...), body=(str, ...))
+    changed_model = create_model("Article", id=(int, ...), title=(str, ...), body=(Searchable[str], ...))
+    plain_model = create_model("Article", id=(int, ...), title=(str, ...), body=(str, ...))
+    with NyanSQLite(path) as db:
+        db.register(old_model)
+    with NyanSQLite(path) as db:
+        with pytest.raises(SchemaMismatchError, match="searchable columns"):
+            db.register(changed_model)
+        with pytest.raises(SchemaMismatchError, match="searchable columns"):
+            db.register(plain_model)
+        assert db.registered_models() == []
+        db.register(old_model)
+
+
+def test_sync_new_fts_indexes_existing_rows(tmp_path):
+    path = str(tmp_path / "fts_added.db")
+    plain_model = create_model("Article", id=(int, ...), title=(str, ...))
+    searchable_model = create_model("Article", id=(int, ...), title=(Searchable[str], ...))
+    with NyanSQLite(path) as db:
+        db.register(plain_model)
+        db.insert(plain_model(id=1, title="existing text"))
+    with NyanSQLite(path) as db:
+        db.register(searchable_model)
+        assert [row.id for row in db.search(searchable_model, "existing")] == [1]
+
+
+@pytest.mark.asyncio
+async def test_async_register_rejects_schema_drift(tmp_path):
+    path = str(tmp_path / "schema_async.db")
+    old_model = create_model("Record", id=(int, ...), name=(str, ...))
+    new_model = create_model("Record", id=(int, ...), name=(str, ...), email=(str, ...))
+    async with NyanSQLiteAIO(path) as db:
+        await db.register(old_model)
+    async with NyanSQLiteAIO(path) as db:
+        with pytest.raises(SchemaMismatchError, match="missing columns=.*email"):
+            await db.register(new_model)
+        assert db.registered_models() == []
+        await db.register(old_model)
+
+
+@pytest.mark.asyncio
+async def test_async_register_rejects_fts_drift(tmp_path):
+    path = str(tmp_path / "fts_schema_async.db")
+    old_model = create_model("Article", id=(int, ...), title=(Searchable[str], ...), body=(str, ...))
+    changed_model = create_model("Article", id=(int, ...), title=(str, ...), body=(Searchable[str], ...))
+    async with NyanSQLiteAIO(path) as db:
+        await db.register(old_model)
+    async with NyanSQLiteAIO(path) as db:
+        with pytest.raises(SchemaMismatchError, match="searchable columns"):
+            await db.register(changed_model)
+        assert db.registered_models() == []
+        await db.register(old_model)
+
+
+@pytest.mark.asyncio
+async def test_async_new_fts_indexes_existing_rows(tmp_path):
+    path = str(tmp_path / "fts_added_async.db")
+    plain_model = create_model("Article", id=(int, ...), title=(str, ...))
+    searchable_model = create_model("Article", id=(int, ...), title=(Searchable[str], ...))
+    async with NyanSQLiteAIO(path) as db:
+        await db.register(plain_model)
+        await db.insert(plain_model(id=1, title="existing text"))
+    async with NyanSQLiteAIO(path) as db:
+        await db.register(searchable_model)
+        assert [row.id for row in await db.search(searchable_model, "existing")] == [1]
 
 
 def test_schema_rejects_unsafe_identifiers_and_unknown_composite_fields():
@@ -200,6 +376,8 @@ def test_sync_limit_offset_validation():
     ])
 
     assert [user.id for user in db.query(User, offset=1, order_by="id")] == [2]
+    assert [user.id for user in db.query(User, age__gte=20, limit=1, offset=1, order_by="id")] == [2]
+    assert db.select(User, ["id"], age__gte=20, limit=1, offset=1, order_by="id") == [{"id": 2}]
 
     with pytest.raises(QueryValidationError):
         db.query(User, limit=-1)
@@ -227,6 +405,8 @@ async def test_async_limit_offset_validation():
     ])
 
     assert [user.id for user in await db.query(User, offset=1, order_by="id")] == [2]
+    assert [user.id for user in await db.query(User, age__gte=20, limit=1, offset=1, order_by="id")] == [2]
+    assert await db.select(User, ["id"], age__gte=20, limit=1, offset=1, order_by="id") == [{"id": 2}]
 
     with pytest.raises(QueryValidationError):
         await db.query(User, limit=-1)

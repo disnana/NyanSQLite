@@ -21,6 +21,12 @@ class TableNameCollisionError(NyanSQLiteError):
     例: UserAuth と User_Auth は両方とも user_auth になる"""
     pass
 
+
+class SchemaMismatchError(NyanSQLiteError):
+    """The existing table does not match the registered Pydantic model."""
+
+    pass
+
 class QueryValidationError(NyanSQLiteError):
     """クエリパラメータの型変換に失敗した場合にスローされます.
 

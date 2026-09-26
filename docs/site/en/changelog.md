@@ -4,6 +4,30 @@ outline: [2, 3]
 
 # CHANGELOG
 
+## [1.1.5] - 2026-09-26
+
+### 🚀 Performance
+- Prepare field-specific decoders and the update validation route at registration. In a local paired conversion benchmark on 20,000 rows with scalar, datetime, and list fields, median time fell from 0.194 to 0.166 seconds.
+- Cached type inspection while decoding rows. In a local 10,000-row benchmark, median query time fell from 0.098 to 0.068 seconds (sync) and from 0.108 to 0.074 seconds (async).
+- Bound `LIMIT` and `OFFSET` as SQL parameters. In a local 1,000-query pagination benchmark, median time fell from 0.0341 to 0.0315 seconds.
+- Removed unused JSON conversion in `__in` filters. Building 500 filters of 1,000 integers fell from 0.138 to 0.091 seconds locally.
+
+### 🐞 Fixed
+- Updated documentation dependencies to address known vulnerabilities and limited the optional `cryptography` dependency to a fixed release on Python 3.10+.
+- Protected in-flight SQLite calls after async cancellation and rolled back open transactions; sync transactions also roll back on interruptions.
+- `update()` now validates changed values, with affected-row validation for models that have custom validators or configuration.
+- `register()` now raises `SchemaMismatchError` when an existing table's columns, types, primary key, nullability, or FTS searchable columns differ from the model.
+- Adding full-text search to an existing table now indexes existing rows immediately.
+
+### 📚 Docs
+- Corrected the error and exception guides, backup example, projection advice, batched async reads, and continuation-based pagination.
+
+### ⚠️ Compatibility
+- On Python 3.9, the `encryption`, `all`, and `dev` extras no longer install `cryptography`. Core Python 3.9 support remains.
+- Invalid partial updates now raise Pydantic `ValidationError`. Incompatible existing tables raise `SchemaMismatchError` on registration; migrate them explicitly.
+
+---
+
 ## [1.1.4] - 2026-06-22
 
 ### 🐞 Fixed

@@ -12,6 +12,7 @@ except ImportError:  # pragma: no cover
 
 from ._markers import CompositeIndex
 from ._types import is_indexed, is_searchable, python_type_to_sqlite, resolve_type
+from .exceptions import SchemaMismatchError
 
 # ── helpers ────────────────────────────────────────────────────────────── #
 
@@ -70,6 +71,52 @@ def model_to_ddl(model: type[BaseModel]) -> str:
 
     col_defs = ",\n  ".join(columns)
     return f'CREATE TABLE IF NOT EXISTS "{table}" (\n  {col_defs}\n)'
+
+
+def check_table_schema(model: type[BaseModel], columns: list[dict[str, Any]]) -> None:
+    """Fail early when an existing table cannot represent the model."""
+    hints = model_hints(model)
+    pk = get_primary_key(model)
+    actual = {column["name"]: column for column in columns}
+    missing = sorted(set(hints) - set(actual))
+    extra = sorted(set(actual) - set(hints))
+    incompatible = []
+    for name, annotation in hints.items():
+        column = actual.get(name)
+        if column is None:
+            continue
+        _, optional = resolve_type(annotation)
+        expected_type = python_type_to_sqlite(annotation)
+        expected_pk = name == pk
+        expected_not_null = not optional and not expected_pk
+        if (
+            column["type"].upper() != expected_type
+            or bool(column["pk"]) != expected_pk
+            or bool(column["notnull"]) != expected_not_null
+        ):
+            incompatible.append(name)
+    if missing or extra or incompatible:
+        raise SchemaMismatchError(
+            f"Existing table '{model_to_table_name(model)}' differs from model {model.__name__}: "
+            f"missing columns={missing}, extra columns={extra}, "
+            f"incompatible columns={incompatible}. Migrate the table before register()."
+        )
+
+
+def check_fts_schema(
+    model: type[BaseModel], existing_sql: str | None, columns: list[dict[str, Any]]
+) -> None:
+    """Reject an FTS definition left behind by a changed Searchable annotation."""
+    expected = [name for name, ann in model_hints(model).items() if is_searchable(ann)]
+    if existing_sql is None:
+        return  # register() will create FTS5 when the model needs it.
+    actual = [column["name"] for column in columns]
+    if not expected or "using fts5" not in existing_sql.lower() or actual != expected:
+        raise SchemaMismatchError(
+            f"Existing FTS table '{model_to_table_name(model)}_fts' differs from "
+            f"model {model.__name__}: searchable columns={actual}, expected={expected}. "
+            "Migrate the FTS table and triggers before register()."
+        )
 
 
 # ── indexes ─────────────────────────────────────────────────────────────── #

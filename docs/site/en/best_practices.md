@@ -34,6 +34,35 @@ class Article(BaseModel):
     body: Searchable[str]
 ```
 
+### Read Only the Columns You Need
+
+For list views that do not need full models, use `select()` to avoid decoding unused JSON fields and constructing Pydantic objects.
+
+```python
+summaries = db.select(Article, ["title"], limit=20)
+```
+
+### Batch Small Async Reads
+
+When fetching many IDs, prefer one `__in` query over awaiting `get()` for every ID. Split very large ID lists to stay within SQLite's variable limit.
+
+```python
+async def load_users(db, user_ids):
+    return await db.query(User, id__in=user_ids)
+```
+
+### Continue From the Last Row for Deep Pages
+
+Large offsets scan past earlier rows. For a list ordered by a unique primary key, continue after the final ID of the previous page.
+
+```python
+first_page = db.query(User, order_by="id", limit=20)
+next_page = (
+    db.query(User, id__gt=first_page[-1].id, order_by="id", limit=20)
+    if first_page else []
+)
+```
+
 ## Security
 
 ### Automatic Parameterization
@@ -52,11 +81,10 @@ Frequent deletions can leave empty space (fragmentation) within the SQLite datab
 
 ### Backups
 
-NyanSQLite (via APSW) supports safely backing up a running database.
+SQLite's `VACUUM INTO` creates a consistent copy, including committed writes. The destination file must not already exist, and the command must run outside a transaction.
 
 ```python
-# Use the underlying connection object to perform a backup
-db.backend().backup("backup.db")
+db.execute_raw("VACUUM INTO ?", ("backup.db",))
 ```
 
 ## Design Patterns

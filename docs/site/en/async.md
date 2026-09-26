@@ -6,9 +6,9 @@ Starting from NyanSQLite v1.1.0, the `NyanSQLiteAIO` class has been introduced t
 
 `NyanSQLiteAIO` offers the following features:
 
-1. **Non-blocking I/O**: It uses `asyncio.to_thread` internally to execute database operations in background threads, ensuring the event loop remains unblocked.
+1. **Event-loop-friendly execution**: It uses `asyncio.to_thread` internally so SQLite work runs off the event loop.
 2. **Thread Safety**: It uses asynchronous locks for write operations, ensuring safety in multi-threaded and asynchronous environments.
-3. **Optimized Reads**: Fetching data and parsing it into Pydantic models are performed together in a single background thread, minimizing context-switching overhead.
+3. **Short read critical sections**: SQLite connection access stays protected, while Pydantic row parsing happens outside that lock whenever possible.
 
 ## Basic Usage
 
@@ -26,7 +26,7 @@ class User(BaseModel):
 async def main():
     # Use asynchronous context manager
     async with NyanSQLiteAIO("app.db") as db:
-        db.register(User)
+        await db.register(User)
         
         # Async Insert
         await db.insert(User(id=1, name="alice"))
@@ -66,5 +66,5 @@ It provides almost the same API as `NyanSQLite` (synchronous version) but as asy
 
 ## Performance Optimization
 
-Since v1.1.0, read operations (`query`, `select`, `search`) have been specifically optimized. 
-By combining data fetching and deserialization into a single thread execution, it achieves higher throughput in asynchronous environments compared to calling `loop.run_in_executor` for individual steps.
+Since v1.1.0, read operations (`query`, `select`, `search`) have been tuned to keep SQLite connection access short.
+After rows are fetched, Python-side deserialization is moved outside the connection lock whenever possible.
