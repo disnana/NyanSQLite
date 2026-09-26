@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## [1.1.5] - 2026-09-26
+
+### 🚀 Performance
+- Prepared field-specific SQLite decoders and the update validation route when a model is registered. In a paired local Python 3.11 benchmark converting 20,000 rows with scalar, datetime, and list fields, median conversion time fell from 0.194 to 0.166 seconds; scalar-only rows were effectively unchanged.
+- Reduced repeated type inspection while converting SQLite rows to Pydantic models. In a local Python 3.11 benchmark reading 10,000 rows with scalar, datetime, and list fields, median query time fell from 0.098 to 0.068 seconds (sync) and from 0.108 to 0.074 seconds (async).
+- Bound `LIMIT` and `OFFSET` as SQL parameters so paginated queries can reuse the same statement shape. In a local 1,000-query pagination benchmark, median time fell from 0.0341 to 0.0315 seconds.
+- Removed an unused whole-collection JSON conversion from `__in` filters. Building 500 filters with 1,000 integer values each fell from 0.138 to 0.091 seconds in a local benchmark.
+
+### 🐞 Fixed
+- Kept the async connection locked until an in-flight SQLite call finishes after cancellation, and rolled back open `atomic()` transactions when cancelled.
+- Rolled back synchronous `atomic()` transactions on interruptions as well as ordinary exceptions.
+- `update()` now validates changed fields before writing. Models with custom validators or configuration validate each affected row inside the transaction, so a failed multi-row update leaves every row unchanged.
+- `register()` now reports incompatible existing columns, types, primary keys, nullability, or FTS searchable columns immediately with `SchemaMismatchError` instead of failing on a later write or silently reusing stale FTS definitions.
+- Adding full-text search to an existing table now indexes its existing rows, so they appear in search results immediately.
+
+### 🧪 Tests
+- Added parity tests for prepared decoders, including strict and warning behavior on malformed data.
+- Added regression coverage for cancellation, transaction isolation, pagination parameters, and unhashable `Annotated` metadata.
+- Added sync and async regression coverage for invalid updates, multi-row rollback, table schema drift, and FTS column drift.
+
+### 📚 Docs
+- Replaced the published error and exception guides that described a different library, corrected the backup example, and documented projection, batched async reads, and continuation-based pagination.
+
+### ⚠️ Compatibility
+- Invalid partial updates now raise Pydantic `ValidationError`. Registering an incompatible existing table now raises `SchemaMismatchError`; migrate the table explicitly before registering the changed model.
+
+---
+
 ## [1.1.4] - 2026-06-22
 
 ### 🐞 Fixed
@@ -76,6 +104,34 @@
 ---
 
 # 更新履歴
+
+## [1.1.5] - 2026-09-26
+
+### 🚀 高速化
+- モデル登録時にフィールド別のSQLite値変換器と更新時の検証経路を準備するようにしました。基本型・日時・リストを含む2万行の変換を比較したPython 3.11のローカル測定では、中央値が0.194秒から0.166秒になりました。基本型だけの行ではほぼ同等でした。
+- SQLiteの行をPydanticモデルへ変換する際、型情報の解析を繰り返さないようにしました。Python 3.11で基本型・日時・リストを含む1万行を取得したローカル測定では、中央値が同期版で0.098秒から0.068秒、非同期版で0.108秒から0.074秒になりました。
+- `LIMIT` と `OFFSET` をSQLパラメータに変更し、ページ位置が変わっても同じ形のSQLを再利用できるようにしました。1,000回のページング検索を行うローカル測定では、中央値が0.0341秒から0.0315秒になりました。
+- `__in` フィルタで使われないコレクション全体のJSON変換を削除しました。整数1,000件の条件を500回生成するローカル測定では、0.138秒から0.091秒になりました。
+
+### 🐞 修正
+- 非同期処理をキャンセルしても実行中のSQLite呼び出しが終わるまで接続を保護し、開いた `atomic()` トランザクションをロールバックするようにしました。
+- 同期版の `atomic()` でも通常の例外に加え、割り込み時にロールバックするようにしました。
+- `update()` が更新値を検証するようにしました。独自バリデータやモデル設定がある場合はトランザクション内で対象行を検証し、複数行のうち1件でも失敗すれば全件の更新を取り消します。
+- 既存テーブルの列、型、主キー、NULL制約、全文検索対象列がモデルと異なる場合、`register()` で `SchemaMismatchError` を送出するようにしました。古いFTS定義の再利用も防ぎます。
+- 既存テーブルへ全文検索を追加したとき、登録済みの行も検索インデックスへ取り込むようにしました。
+
+### 🧪 テスト
+- 準備済み変換器と従来の変換処理が、不正値での厳格モードや警告を含めて同じ結果になることを検証しました。
+- キャンセル、トランザクションの分離、ページング用パラメータ、ハッシュ化できない `Annotated` メタデータの回帰テストを追加しました。
+- 同期・非同期の無効な更新、複数行更新の取り消し、テーブルとFTSのスキーマ不一致を検証する回帰テストを追加しました。
+
+### 📚 ドキュメント
+- 別ライブラリのAPIが残っていた公開エラー／例外ガイドを修正し、バックアップ例と必要列だけの取得・非同期の一括取得・続き位置ページングの例を更新しました。
+
+### ⚠️ 互換性
+- 無効な部分更新はPydanticの `ValidationError`、互換性のない既存テーブルの登録は `SchemaMismatchError` を送出します。モデル変更時はテーブルを明示的に移行してください。
+
+---
 
 ## [1.1.4] - 2026-06-22
 

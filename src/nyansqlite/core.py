@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 from ._connection import NyanConnection
 from ._schema import (
+    check_fts_schema,
+    check_table_schema,
     get_primary_key,
     model_hints,
     model_to_ddl,
@@ -18,7 +20,8 @@ from ._schema import (
     model_to_indexes,
     model_to_table_name,
 )
-from ._types import deserialize_value, serialize_value
+from ._types import compile_deserializer, serialize_value
+from ._update_validation import needs_row_validation, prepare_update
 from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
@@ -108,7 +111,9 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
 
         # モデルのヒントに基づいて値をシリアライズ
         serialized_value = value
-        if model_meta and field_name in model_meta.hints:
+        # IN serializes each element below; serializing the whole collection
+        # first creates an unused JSON string for every query.
+        if model_meta and field_name in model_meta.hints and not key.endswith(("__in", "__is_null")):
             serialized_value = serialize_value(value, model_meta.hints[field_name])
 
         if "__" in key:
@@ -211,16 +216,18 @@ def _order_sql(order_by: Optional[str], desc: bool) -> str:
     return f' ORDER BY "{order_by}" {"DESC" if desc else "ASC"}'
 
 
-def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
+def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[int]]:
     """LIMITおよびOFFSET句を構築します。"""
     sql = ""
+    values: list[int] = []
     if limit is not None:
         if isinstance(limit, bool) or not isinstance(limit, Integral):
             raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
         limit_value = int(limit)
         if limit_value < 0:
             raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
-        sql += f" LIMIT {limit_value}"
+        sql += " LIMIT ?"
+        values.append(limit_value)
     if offset is not None:
         if isinstance(offset, bool) or not isinstance(offset, Integral):
             raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
@@ -229,27 +236,33 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> str:
             raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
         if limit is None:
             sql += " LIMIT -1"
-        sql += f" OFFSET {offset_value}"
-    return sql
+        sql += " OFFSET ?"
+        values.append(offset_value)
+    return sql, values
 
 
 # ── internal model metadata ───────────────────────────────────────────── #
 
 class _Meta:
     """モデルの内部メタデータ。"""
-    __slots__ = ("table", "pk", "hints", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "decoders", "needs_row_validation", "fts_table", "fts_fields")
 
     def __init__(
         self,
         table:      str,
         pk:         Optional[str],
         hints:      dict[str, Any],
+        model:      type[BaseModel],
+        strict_deserialization: bool,
         fts_table:  Optional[str],
         fts_fields: list[str],
     ):
         self.table      = table
         self.pk         = pk
         self.hints      = hints
+        self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
+                           for name, annotation in hints.items()}
+        self.needs_row_validation = needs_row_validation(model)
         self.fts_table  = fts_table
         self.fts_fields = fts_fields
 
@@ -341,6 +354,16 @@ class NyanSQLite:
         with self._lock:
             with self._conn.transaction():
                 self._conn.execute(model_to_ddl(model))
+                check_table_schema(model, self._conn.execute(f'PRAGMA table_info("{table}")'))
+                fts_name = f"{table}_fts"
+                fts_rows = self._conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (fts_name,)
+                )
+                check_fts_schema(
+                    model,
+                    fts_rows[0]["sql"] if fts_rows else None,
+                    self._conn.execute(f'PRAGMA table_info("{fts_name}")') if fts_rows else [],
+                )
                 for idx_sql in model_to_indexes(model):
                     self._conn.execute(idx_sql)
 
@@ -351,12 +374,15 @@ class NyanSQLite:
                     self._conn.execute(fts_create)
                     for trig in fts_triggers:
                         self._conn.execute(trig)
+                    if not fts_rows:
+                        self._conn.execute(f'INSERT INTO "{fts_name}"("{fts_name}") VALUES (?)', ("rebuild",))
                     from ._types import is_searchable
                     fts_table  = f"{table}_fts"
                     fts_fields = [f for f, ann in hints.items() if is_searchable(ann)]
 
             self._registry[model] = _Meta(
-                table=table, pk=pk, hints=hints,
+                table=table, pk=pk, hints=hints, model=model,
+                strict_deserialization=self._strict_deserialization,
                 fts_table=fts_table, fts_fields=fts_fields,
             )
 
@@ -399,11 +425,9 @@ class NyanSQLite:
         """
         data = {}
         for k, v in row.items():
-            if k in meta.hints:
-                data[k] = deserialize_value(
-                    v, meta.hints[k],
-                    strict=self._strict_deserialization
-                )
+            decoder = meta.decoders.get(k)
+            if decoder is not None:
+                data[k] = decoder(v)
         return model(**data)
 
     # ── INSERT ───────────────────────────────────────────────────────── #
@@ -505,6 +529,7 @@ class NyanSQLite:
             return 0
         meta = self._meta(model)
         meta.check_fields(list(fields), model.__name__)
+        fields, needs_rows = prepare_update(model, fields, meta.needs_row_validation)
 
         set_parts: list[str] = []
         set_vals:  list[Any] = []
@@ -517,6 +542,15 @@ class NyanSQLite:
 
         with self._lock:
             with self._conn.transaction():
+                if needs_rows:
+                    rows = self._conn.execute(f'SELECT * FROM "{meta.table}" {where_clause}', tuple(where_vals))
+                    for row in rows:
+                        candidate = {
+                            name: meta.decoders[name](value)
+                            for name, value in row.items() if name in meta.hints
+                        }
+                        candidate.update(fields)
+                        model.model_validate(candidate)
                 self._conn.execute(sql, tuple(set_vals + where_vals))
             return self._conn.changes()
 
@@ -607,13 +641,14 @@ class NyanSQLite:
         if order_by:
             meta.check_fields([order_by], model.__name__)
 
+        page_sql, page_values = _limit_sql(limit, offset)
         sql = (
             f'SELECT * FROM "{meta.table}" {where_clause}'  # nosec B608
             + _order_sql(order_by, desc)
-            + _limit_sql(limit, offset)
+            + page_sql
         )
         with self._lock:
-            rows = self._conn.execute(sql, tuple(values))
+            rows = self._conn.execute(sql, tuple(values + page_values))
         return [self._from_row(model, meta, r) for r in rows]
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
@@ -657,15 +692,16 @@ class NyanSQLite:
 
         col_sql      = ", ".join(f'"{f}"' for f in fields)
         where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        page_sql, page_values = _limit_sql(limit, offset)
         sql = (
             f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'  # nosec B608
             + _order_sql(order_by, desc)
-            + _limit_sql(limit, offset)
+            + page_sql
         )
         with self._lock:
-            rows = self._conn.execute(sql, tuple(values))
+            rows = self._conn.execute(sql, tuple(values + page_values))
         return [
-            {f: deserialize_value(row.get(f), meta.hints[f], strict=self._strict_deserialization) for f in fields}
+            {f: meta.decoders[f](row.get(f)) for f in fields}
             for row in rows
         ]
 
@@ -709,15 +745,16 @@ class NyanSQLite:
 
         table = meta.table
         fts   = meta.fts_table
+        page_sql, page_values = _limit_sql(limit, None)
         sql = (
             f'SELECT t.* FROM "{table}" t '  # nosec B608
             f'JOIN "{fts}" f ON t.rowid = f.rowid '
             f'WHERE "{fts}" MATCH ? '
             f'ORDER BY rank'
-            + _limit_sql(limit, None)
+            + page_sql
         )
         with self._lock:
-            rows = self._conn.execute(sql, (query,))
+            rows = self._conn.execute(sql, (query, *page_values))
         return [self._from_row(model, meta, r) for r in rows]
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #

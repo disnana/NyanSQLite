@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import warnings
 from typing import Optional
 
@@ -203,6 +204,7 @@ async def test_search_and_rebuild(db):
     results = await db.search(Article, "Python")
     assert len(results) == 1
     assert results[0].title == "Python Guide"
+    assert len(await db.search(Article, "Python", limit=1)) == 1
 
     # Rebuild FTS (no error should occur)
     await db.rebuild_fts(Article)
@@ -374,3 +376,105 @@ async def test_register_is_atomic_on_failure(base_db_aio, monkeypatch):
     )
     assert tables == []
     assert "BrokenArticle" not in base_db_aio.registered_models()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_atomic_rolls_back(db):
+    inserted = asyncio.Event()
+
+    async def transaction():
+        async with db.atomic():
+            await db.insert(User(id=901, name="cancelled", age=1))
+            inserted.set()
+            await asyncio.Event().wait()
+
+    task = asyncio.create_task(transaction())
+    await asyncio.wait_for(inserted.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not await db.exists(User, id=901)
+    await db.insert(User(id=902, name="after_cancel", age=1))
+    assert await db.exists(User, id=902)
+
+
+@pytest.mark.asyncio
+async def test_other_task_cannot_read_uncommitted_atomic_write(db):
+    inserted = asyncio.Event()
+    release = asyncio.Event()
+
+    async def transaction():
+        with pytest.raises(ValueError):
+            async with db.atomic():
+                await db.insert(User(id=905, name="uncommitted", age=1))
+                inserted.set()
+                await release.wait()
+                raise ValueError("rollback")
+
+    writer = asyncio.create_task(transaction())
+    await asyncio.wait_for(inserted.wait(), 1)
+    reader = asyncio.create_task(db.count(User))
+    await asyncio.sleep(0)
+    assert not reader.done()
+    release.set()
+    await writer
+    assert await asyncio.wait_for(reader, 1) == 0
+
+
+@pytest.mark.asyncio
+async def test_cancelled_db_call_keeps_connection_serialized(db, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    original_execute = db._conn.execute
+
+    def slow_execute(sql, params=()):
+        if sql == "SELECT 1 AS n":
+            started.set()
+            assert release.wait(2)
+            try:
+                return original_execute(sql, params)
+            finally:
+                finished.set()
+        assert not started.is_set() or finished.is_set()
+        return original_execute(sql, params)
+
+    monkeypatch.setattr(db._conn, "execute", slow_execute)
+    first = asyncio.create_task(db.execute_raw("SELECT 1 AS n"))
+    assert await asyncio.to_thread(started.wait, 1)
+    first.cancel()
+    second = asyncio.create_task(db.count(User))
+    await asyncio.sleep(0)
+    assert not second.done()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert await asyncio.wait_for(second, 1) == 0
+
+
+@pytest.mark.asyncio
+async def test_cancelled_begin_does_not_leave_transaction_open(db, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+    original_raw = db._conn._raw
+
+    def slow_begin(sql, params=()):
+        if sql == "BEGIN":
+            started.set()
+            assert release.wait(2)
+        return original_raw(sql, params)
+
+    monkeypatch.setattr(db._conn, "_raw", slow_begin)
+
+    async def transaction():
+        async with db.atomic():
+            pass
+
+    task = asyncio.create_task(transaction())
+    assert await asyncio.to_thread(started.wait, 1)
+    task.cancel()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not db._conn.in_transaction()

@@ -104,7 +104,7 @@ class NyanConnection:
         try:
             yield
             self._raw("COMMIT")
-        except Exception:
+        except BaseException:
             self._raw("ROLLBACK")
             raise
 

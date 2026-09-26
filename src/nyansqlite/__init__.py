@@ -5,6 +5,7 @@ from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
     QueryValidationError,
+    SchemaMismatchError,
     SearchNotEnabledError,
     TableNameCollisionError,
 )
@@ -21,5 +22,6 @@ __all__ = [
     "SearchNotEnabledError",
     "TableNameCollisionError",
     "QueryValidationError",
+    "SchemaMismatchError",
 ]
-__version__ = "1.1.4"
+__version__ = "1.1.5"

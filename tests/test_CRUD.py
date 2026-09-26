@@ -191,6 +191,7 @@ def test_search_and_rebuild(db):
     results = db.search(Article, "Python")
     assert len(results) == 1
     assert results[0].title == "Python Guide"
+    assert len(db.search(Article, "Python", limit=1)) == 1
 
     # Rebuild FTS (no error should occur)
     db.rebuild_fts(Article)
@@ -248,6 +249,18 @@ def test_atomic_transaction(db):
     except ValueError:
         pass
     assert not db.exists(User, name='Rollback')
+
+
+def test_atomic_rolls_back_on_interrupt(db):
+    with pytest.raises(KeyboardInterrupt):
+        with db.atomic():
+            db.insert(User(id=903, name="interrupted", age=1))
+            raise KeyboardInterrupt
+
+    assert not db.exists(User, id=903)
+    db.insert(User(id=904, name="after_interrupt", age=1))
+    assert db.exists(User, id=904)
+
 
 def test_nested_atomic(db):
     """Test nested db.atomic() calls."""

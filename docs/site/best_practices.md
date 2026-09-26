@@ -34,6 +34,35 @@ class Article(BaseModel):
     body: Searchable[str]
 ```
 
+### 必要な列だけ取得する
+
+モデル全体が不要な一覧画面では `select()` で列を絞ってください。JSON列の復元とPydanticモデル生成を省けます。
+
+```python
+summaries = db.select(Article, ["title"], limit=20)
+```
+
+### 非同期の細かな読み取りをまとめる
+
+1件ずつ多数の `get()` を待つ場合は、可能なら `__in` でまとめて取得してください。大量のIDはSQLiteの変数数制限を超えないよう分割します。
+
+```python
+async def load_users(db, user_ids):
+    return await db.query(User, id__in=user_ids)
+```
+
+### 深いページは続き位置から取得する
+
+大きい `offset` は前の行を読み飛ばすため遅くなります。一意な主キー順の一覧なら、前ページ最後のIDを使います。
+
+```python
+first_page = db.query(User, order_by="id", limit=20)
+next_page = (
+    db.query(User, id__gt=first_page[-1].id, order_by="id", limit=20)
+    if first_page else []
+)
+```
+
 ## セキュリティ
 
 ### 自動的なパラメータ化
@@ -52,11 +81,10 @@ Pydanticモデルを使用することで、データベースに保存される
 
 ### バックアップ
 
-NyanSQLite（APSW）は、実行中のデータベースを安全にバックアップする機能を持っています。
+SQLiteの `VACUUM INTO` で、コミット済みデータの一貫したコピーを作成できます。出力先ファイルは存在しない必要があり、トランザクションの外で実行してください。
 
 ```python
-# 下位層の接続オブジェクトを使用してバックアップ
-db.backend().backup("backup.db")
+db.execute_raw("VACUUM INTO ?", ("backup.db",))
 ```
 
 ## デザインパターン
