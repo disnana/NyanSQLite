@@ -10,6 +10,7 @@ from typing import Any, Optional, TypeVar
 from pydantic import BaseModel
 
 from ._connection import NyanConnection
+from ._row_validation import direct_row_validator
 from ._schema import (
     check_fts_schema,
     check_table_schema,
@@ -22,6 +23,7 @@ from ._schema import (
 )
 from ._types import compile_deserializer, compile_serializer, serialize_value
 from ._update_validation import needs_row_validation, prepare_update
+from ._where_order import keyword_order
 from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
@@ -100,8 +102,17 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
                 "キーワード引数または明示的な比較演算子を使用してください。"
             )
 
+    # Keep validation in the caller's order, then give equivalent predicates
+    # a stable SQL shape so APSW can reuse its prepared statement.
+    order = keyword_order(tuple(kwargs)) if len(kwargs) > 1 else ()
+    normalize_keywords = bool(order)
+    keyword_clause_start = len(clauses)
+    keyword_value_start = len(values)
+    keyword_positions: list[tuple[int, int, int]] = []
+
     # キーワードフィルタを処理: age__gt=10
     for key, value in kwargs.items():
+        value_start = len(values)
         field_name = key.split("__")[0]
         if model_meta and field_name not in model_meta.hints:
             raise FieldNotFoundError(
@@ -184,6 +195,8 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
                         raise TypeError("'in' 演算子の値はイテラブルである必要があります。")
                     if not value:
                         clauses.append("0")
+                        if normalize_keywords:
+                            keyword_positions.append((len(clauses) - 1, value_start, len(values)))
                         continue
                     ph = ", ".join("?" * len(value))
                 except TypeError as e:
@@ -205,6 +218,16 @@ def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Opti
         else:
             clauses.append(f'"{key}" = ?')
             values.append(serialized_value)
+
+        if normalize_keywords:
+            keyword_positions.append((len(clauses) - 1, value_start, len(values)))
+
+    if normalize_keywords:
+        ordered = [keyword_positions[index] for index in order]
+        clauses[keyword_clause_start:] = [clauses[index] for index, _, _ in ordered]
+        values[keyword_value_start:] = [
+            value for _, start, end in ordered for value in values[start:end]
+        ]
 
     return "WHERE " + " AND ".join(clauses), values
 
@@ -245,7 +268,7 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[i
 
 class _Meta:
     """モデルの内部メタデータ。"""
-    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_sql", "needs_row_validation", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_sql", "needs_row_validation", "row_validator", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -267,6 +290,7 @@ class _Meta:
         ph = ", ".join("?" for _ in hints)
         self.insert_sql = f'INSERT INTO "{table}" ({cols}) VALUES ({ph})'
         self.needs_row_validation = needs_row_validation(model)
+        self.row_validator = direct_row_validator(model)
         self.fts_table  = fts_table
         self.fts_fields = fts_fields
 
@@ -315,7 +339,13 @@ class NyanSQLite:
         db.select(Article, fields=["title", "views"], author="neko")
     """
 
-    def __init__(self, path: str = ":memory:", wal: bool = True, strict_deserialization: bool = False):
+    def __init__(
+        self,
+        path: str = ":memory:",
+        wal: bool = True,
+        strict_deserialization: bool = False,
+        statement_cache_size: Optional[int] = None,
+    ):
         """NyanSQLiteを初期化します。
 
         Args:
@@ -324,8 +354,10 @@ class NyanSQLite:
             strict_deserialization (bool): デシリアライズ時に厳密なチェックを行うかどうか。
                                          Trueの場合、不正なデータに対して ValueError を発生させます。
                                          Falseの場合、警告を出して生の値を返します。
+            statement_cache_size (Optional[int]): よく使うSQL文のキャッシュ件数。
+                                                  Noneの場合はバックエンドの既定値を使います。
         """
-        self._conn     = NyanConnection(path, wal=wal)
+        self._conn     = NyanConnection(path, wal=wal, statement_cache_size=statement_cache_size)
         self._registry: dict[type[BaseModel], _Meta] = {}
         self._lock     = threading.RLock()
         self._strict_deserialization = strict_deserialization
@@ -436,6 +468,10 @@ class NyanSQLite:
 
     def _from_rows(self, model: type[M], meta: _Meta, cols: list[str], rows: list[tuple]) -> list[M]:
         decoders = [(name, meta.decoders.get(name)) for name in cols]
+        if meta.row_validator is not None and meta.row_validator is model.__pydantic_validator__:
+            validate = meta.row_validator.validate_python
+            return [validate({name: decode(value) for (name, decode), value in zip(decoders, row)
+                              if decode is not None}) for row in rows]
         return [model(**{name: decode(value) for (name, decode), value in zip(decoders, row)
                          if decode is not None}) for row in rows]
 
