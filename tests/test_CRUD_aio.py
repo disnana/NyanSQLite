@@ -317,8 +317,8 @@ async def test_concurrent_reads_do_not_wait_for_row_parsing(db, monkeypatch):
         for i in range(1, 6)
     ])
 
-    original_execute = db._conn.execute
-    original_from_row = db._from_row
+    original_execute = db._conn.execute_rows
+    original_from_rows = db._from_rows
     parse_started = asyncio.Event()
     second_execute_started = asyncio.Event()
     select_calls = 0
@@ -332,15 +332,15 @@ async def test_concurrent_reads_do_not_wait_for_row_parsing(db, monkeypatch):
                 loop.call_soon_threadsafe(second_execute_started.set)
         return original_execute(sql, params)
 
-    def slow_from_row(model, meta, row):
+    def slow_from_rows(model, meta, cols, rows):
         if not parse_started.is_set():
             loop.call_soon_threadsafe(parse_started.set)
         import time
         time.sleep(0.05)
-        return original_from_row(model, meta, row)
+        return original_from_rows(model, meta, cols, rows)
 
-    monkeypatch.setattr(db._conn, "execute", wrapped_execute)
-    monkeypatch.setattr(db, "_from_row", slow_from_row)
+    monkeypatch.setattr(db._conn, "execute_rows", wrapped_execute)
+    monkeypatch.setattr(db, "_from_rows", slow_from_rows)
 
     first_query = asyncio.create_task(db.query(User, order_by="id"))
     await asyncio.wait_for(parse_started.wait(), timeout=1.0)

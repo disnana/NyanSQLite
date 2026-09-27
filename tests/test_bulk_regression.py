@@ -1,10 +1,9 @@
 """Bulk writes remain atomic and serialization stays off the async loop."""
 
-import asyncio
 import threading
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from nyansqlite import NyanSQLite, NyanSQLiteAIO
 
@@ -12,6 +11,16 @@ from nyansqlite import NyanSQLite, NyanSQLiteAIO
 class BulkRecord(BaseModel):
     id: int
     data: dict[str, int]
+
+
+class ValidatedRecord(BaseModel):
+    id: int
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def normalize(cls, value: str) -> str:
+        return value.upper()
 
 
 def test_large_executemany_and_rollback():
@@ -23,6 +32,15 @@ def test_large_executemany_and_rollback():
         with pytest.raises(Exception):
             db.insert_many([BulkRecord(id=17000, data={"i": 1}), BulkRecord(id=0, data={"i": 2})])
         assert db.get(BulkRecord, id=17000) is None
+
+
+def test_tuple_rows_respect_column_order_and_pydantic_validation():
+    with NyanSQLite() as db:
+        # Existing tables can have a different column order from the model.
+        db.execute_raw('CREATE TABLE "validated_record" ("name" TEXT NOT NULL, "id" INTEGER PRIMARY KEY)')
+        db.register(ValidatedRecord)
+        db.execute_raw('INSERT INTO "validated_record" ("name", "id") VALUES (?, ?)', ("mixed", 1))
+        assert db.query(ValidatedRecord) == [ValidatedRecord(id=1, name="MIXED")]
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 """Async bulk insert and model read benchmarks."""
 
 import asyncio
+
 from pydantic import BaseModel
 
 from nyansqlite import NyanSQLiteAIO

@@ -80,6 +80,21 @@ class NyanConnection:
     def execute(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
         return self._raw(sql, params)
 
+    def execute_rows(self, sql: str, params: tuple = ()) -> tuple[list[str], list[tuple]]:
+        """Fetch raw rows for model construction without building intermediate dicts."""
+        if self._backend == "apsw":
+            cur = self._conn.cursor()
+            result = cur.execute(sql, params)
+            try:
+                cols = [column[0] for column in cur.description]
+            except (apsw.ExecutionCompleteError, AttributeError):
+                return [], []
+            return cols, list(result)
+        cur = self._conn.execute(sql, params)
+        if cur.description is None:
+            return [], []
+        return [column[0] for column in cur.description], cur.fetchall()
+
     def executemany(self, sql: str, rows: Iterable[tuple]) -> None:
         if self._backend == "apsw":
             self._conn.cursor().executemany(sql, rows)

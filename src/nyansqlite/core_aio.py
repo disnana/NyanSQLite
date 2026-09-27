@@ -471,6 +471,11 @@ class NyanSQLiteAIO:
                 data[k] = decoder(v)
         return model(**data)
 
+    def _from_rows(self, model: type[M], meta: _Meta, cols: list[str], rows: list[tuple]) -> list[M]:
+        decoders = [(name, meta.decoders.get(name)) for name in cols]
+        return [model(**{name: decode(value) for (name, decode), value in zip(decoders, row)
+                         if decode is not None}) for row in rows]
+
     # ── INSERT ───────────────────────────────────────────────────────── #
 
     async def insert(self, obj: M) -> M:
@@ -687,8 +692,8 @@ class NyanSQLiteAIO:
             + page_sql
         )
 
-        rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values + page_values)))
-        return await asyncio.to_thread(lambda: [self._from_row(model, meta, r) for r in rows])
+        cols, rows = await self._run_db_call(lambda: self._conn.execute_rows(sql, tuple(values + page_values)))
+        return await asyncio.to_thread(self._from_rows, model, meta, cols, rows)
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -794,8 +799,8 @@ class NyanSQLiteAIO:
             + page_sql
         )
 
-        rows = await self._run_db_call(lambda: self._conn.execute(sql, (query, *page_values)))
-        return await asyncio.to_thread(lambda: [self._from_row(model, meta, r) for r in rows])
+        cols, rows = await self._run_db_call(lambda: self._conn.execute_rows(sql, (query, *page_values)))
+        return await asyncio.to_thread(self._from_rows, model, meta, cols, rows)
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 
