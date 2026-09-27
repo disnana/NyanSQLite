@@ -1,5 +1,7 @@
 """Select the Pydantic row validator for ordinary models."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel
 from pydantic_core import SchemaValidator
 
