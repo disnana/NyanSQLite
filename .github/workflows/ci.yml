@@ -128,7 +128,7 @@ jobs:
   # ============================================
   # Test Job - Matrix based on branch
   # main: Python 3.9-3.14 × all OS
-  # other: Python 3.13 × each OS (limited)
+  # other: Python 3.9 on Ubuntu, Python 3.13 on each OS
   # ============================================
   test:
     name: Test (py${{ matrix.python-version }}, ${{ matrix.os }})
@@ -140,7 +140,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ${{ github.ref == 'refs/heads/main' && fromJSON('["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') || fromJSON('["3.13"]') }}
+        python-version: ${{ github.ref == 'refs/heads/main' && fromJSON('["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') || fromJSON('["3.9", "3.13"]') }}
         exclude:
           # macOS: limit to 2 popular versions (3.11, 3.13)
           - os: macos-latest
