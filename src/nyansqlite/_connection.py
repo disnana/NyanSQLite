@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from typing import Any
 
@@ -80,7 +80,7 @@ class NyanConnection:
     def execute(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
         return self._raw(sql, params)
 
-    def executemany(self, sql: str, rows: list[tuple]) -> None:
+    def executemany(self, sql: str, rows: Iterable[tuple]) -> None:
         if self._backend == "apsw":
             self._conn.cursor().executemany(sql, rows)
         else:

@@ -86,8 +86,8 @@ jobs:
           docker rm -f bench-sync || true
           docker run --name bench-sync --network none -e USE_RAMDISK=1 \
             ${{ needs.build.outputs.image_tag }} \
-            bash -c "mkdir -p /output && pytest tests/test_benchmark.py -v --benchmark-only --benchmark-json=/output/benchmark.json || true"
-          docker cp bench-sync:/output/benchmark.json output/benchmark.json || true
+            bash -c "mkdir -p /output && pytest tests/test_benchmark.py -v --benchmark-only --benchmark-json=/output/benchmark.json"
+          docker cp bench-sync:/output/benchmark.json output/benchmark.json
           docker rm bench-sync || true
 
       - uses: actions/upload-artifact@v7
@@ -113,8 +113,8 @@ jobs:
           docker rm -f bench-async || true
           docker run --name bench-async --network none -e USE_RAMDISK=1 \
             ${{ needs.build.outputs.image_tag }} \
-            bash -c "mkdir -p /output && pytest tests/test_async_benchmark.py -v --benchmark-only --benchmark-json=/output/async-benchmark.json || true"
-          docker cp bench-async:/output/async-benchmark.json output/async-benchmark.json || true
+            bash -c "mkdir -p /output && pytest tests/test_async_benchmark.py -v --benchmark-only --benchmark-json=/output/async-benchmark.json"
+          docker cp bench-async:/output/async-benchmark.json output/async-benchmark.json
           docker rm bench-async || true
 
       - uses: actions/upload-artifact@v7
@@ -197,10 +197,10 @@ jobs:
           echo "> ⚠️ **Note**: Self-hosted RPI runner results." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔄 Sync Benchmarks" >> $GITHUB_STEP_SUMMARY
-          python3 scripts/parse_benchmark.py benchmark-results sync >> $GITHUB_STEP_SUMMARY || true
+          python3 scripts/parse_benchmark.py benchmark-results sync >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ⚡ Async Benchmarks" >> $GITHUB_STEP_SUMMARY
-          python3 scripts/parse_benchmark.py async-benchmark-results async >> $GITHUB_STEP_SUMMARY || true
+          python3 scripts/parse_benchmark.py async-benchmark-results async >> $GITHUB_STEP_SUMMARY
 
       - name: Merge all results for comparison
         if: github.ref == 'refs/heads/main' && needs.should-run.outputs.run_benchmark == 'true'

@@ -156,6 +156,29 @@ def serialize_value(value: Any, annotation: Any) -> Any:
     return value
 
 
+def compile_serializer(annotation: Any) -> Callable[[Any], Any]:
+    """Resolve a field's type once, retaining serialize_value's value rules."""
+    base, _ = resolve_type(annotation)
+    json_field = get_origin(base) in (dict, list)
+
+    def encode(value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, int):
+            return int(value) if isinstance(value, bool) else value
+        if isinstance(value, float):
+            return value
+        if isinstance(value, (dict, list)) or json_field:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        return value
+
+    return encode
+
+
 def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
     """Convert a SQLite scalar back to the correct Python type.
 
