@@ -108,12 +108,12 @@ jobs:
         TEMP: 'D:\temp'
         TMP: 'D:\temp'
       run: |
-        pytest tests/test_benchmark.py -v --benchmark-only --benchmark-json=benchmark.json || true
+        pytest tests/test_benchmark.py -v --benchmark-only --benchmark-json=benchmark.json
 
     - name: Run sync benchmarks (Linux/macOS)
       if: runner.os != 'Windows'
       run: |
-        pytest tests/test_benchmark.py -v --benchmark-only --benchmark-json=benchmark.json || true
+        pytest tests/test_benchmark.py -v --benchmark-only --benchmark-json=benchmark.json
     
     - name: Upload sync benchmark results
       uses: actions/upload-artifact@v7
@@ -166,12 +166,12 @@ jobs:
         TEMP: 'D:\temp'
         TMP: 'D:\temp'
       run: |
-        pytest tests/test_async_benchmark.py -v --benchmark-only --benchmark-json=async-benchmark.json || true
+        pytest tests/test_async_benchmark.py -v --benchmark-only --benchmark-json=async-benchmark.json
 
     - name: Run async benchmarks (Linux/macOS)
       if: runner.os != 'Windows'
       run: |
-        pytest tests/test_async_benchmark.py -v --benchmark-only --benchmark-json=async-benchmark.json || true
+        pytest tests/test_async_benchmark.py -v --benchmark-only --benchmark-json=async-benchmark.json
     
     - name: Upload async benchmark results
       uses: actions/upload-artifact@v7
@@ -240,13 +240,13 @@ jobs:
         echo "### 🔄 Sync Benchmarks (NanaSQLite)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        python3 scripts/parse_benchmark.py benchmark-results sync >> $GITHUB_STEP_SUMMARY || echo "Failed to parse sync benchmark results" >> $GITHUB_STEP_SUMMARY
+        python3 scripts/parse_benchmark.py benchmark-results sync >> $GITHUB_STEP_SUMMARY
         
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### ⚡ Async Benchmarks (AsyncNanaSQLite)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        python3 scripts/parse_benchmark.py async-benchmark-results async >> $GITHUB_STEP_SUMMARY || echo "Failed to parse async benchmark results" >> $GITHUB_STEP_SUMMARY
+        python3 scripts/parse_benchmark.py async-benchmark-results async >> $GITHUB_STEP_SUMMARY
 
 
     # --- Performance Regression Detection (Only on main branch when benchmarks ran) ---

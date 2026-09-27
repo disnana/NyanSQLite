@@ -21,7 +21,7 @@ from ._schema import (
     model_to_indexes,
     model_to_table_name,
 )
-from ._types import compile_deserializer, serialize_value
+from ._types import compile_deserializer, compile_serializer, serialize_value
 from ._update_validation import needs_row_validation, prepare_update
 from .exceptions import (
     FieldNotFoundError,
@@ -238,7 +238,7 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[i
 # ── internal model metadata ───────────────────────────────────────────── #
 
 class _Meta:
-    __slots__ = ("table", "pk", "hints", "decoders", "needs_row_validation", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_sql", "needs_row_validation", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -255,6 +255,10 @@ class _Meta:
         self.hints      = hints
         self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
                            for name, annotation in hints.items()}
+        self.encoders = {name: compile_serializer(annotation) for name, annotation in hints.items()}
+        cols = ", ".join(f'"{name}"' for name in hints)
+        ph = ", ".join("?" for _ in hints)
+        self.insert_sql = f'INSERT INTO "{table}" ({cols}) VALUES ({ph})'
         self.needs_row_validation = needs_row_validation(model)
         self.fts_table  = fts_table
         self.fts_fields = fts_fields
@@ -318,8 +322,8 @@ class NyanSQLiteAIO:
     async def _run_db_call(self, fn: Any) -> Any:
         """Run a SQLite call under the connection lock.
 
-        SQLite access itself stays serialized for safety, while model
-        deserialization can happen outside this lock.
+        SQLite access itself stays serialized for safety. Callers can run
+        model deserialization in a worker after releasing this lock.
         """
         current_task = asyncio.current_task()
         while self._write_lock.locked() and self._lock_owner != current_task:
@@ -467,6 +471,11 @@ class NyanSQLiteAIO:
                 data[k] = decoder(v)
         return model(**data)
 
+    def _from_rows(self, model: type[M], meta: _Meta, cols: list[str], rows: list[tuple]) -> list[M]:
+        decoders = [(name, meta.decoders.get(name)) for name in cols]
+        return [model(**{name: decode(value) for (name, decode), value in zip(decoders, row)
+                         if decode is not None}) for row in rows]
+
     # ── INSERT ───────────────────────────────────────────────────────── #
 
     async def insert(self, obj: M) -> M:
@@ -519,36 +528,20 @@ class NyanSQLiteAIO:
         if any(type(o) is not model_type for o in objs):
             raise TypeError("insert_many() only accepts instances of the same model type.")
         meta = self._meta(model_type)
-        hints = meta.hints
-        fields = list(hints.keys())
+        fields = list(meta.hints)
 
-        # SQLite default limit on parameters is 32766
-        rows = []
-        for o in objs:
-            row_tuple = tuple(serialize_value(getattr(o, f), hints[f]) for f in fields)
-            rows.append(row_tuple)
-
-        cols_count = len(fields)
-        params_limit = 32000  # Conservative limit
-        chunk_size = max(1, params_limit // cols_count)
-
-        total_inserted = 0
-        meta_table = meta.table
-        cols = ", ".join(f'"{k}"' for k in fields)
-        ph = ", ".join("?" for _ in range(cols_count))
-        sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'  # nosec B608
+        encoders = tuple(meta.encoders[f] for f in fields)
+        def rows():
+            for obj in objs:
+                yield tuple(encode(getattr(obj, field)) for field, encode in zip(fields, encoders))
 
         async with self._write_context():
             def _bulk_insert_all():
                 with self._conn.transaction():
-                    for chunk_start in range(0, len(rows), chunk_size):
-                        chunk = rows[chunk_start:chunk_start + chunk_size]
-                        self._conn.executemany(sql, chunk)
+                    self._conn.executemany(meta.insert_sql, rows())
 
             await self._run_db_call(_bulk_insert_all)
-            total_inserted = len(rows)
-
-        return total_inserted
+        return len(objs)
 
     # ── UPDATE ───────────────────────────────────────────────────────── #
 
@@ -699,8 +692,8 @@ class NyanSQLiteAIO:
             + page_sql
         )
 
-        rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values + page_values)))
-        return [self._from_row(model, meta, r) for r in rows]
+        cols, rows = await self._run_db_call(lambda: self._conn.execute_rows(sql, tuple(values + page_values)))
+        return await asyncio.to_thread(self._from_rows, model, meta, cols, rows)
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -755,10 +748,10 @@ class NyanSQLiteAIO:
         )
 
         rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values + page_values)))
-        return [
+        return await asyncio.to_thread(lambda: [
             {f: meta.decoders[f](row.get(f)) for f in fields}
             for row in rows
-        ]
+        ])
 
     # ── FTS5 SEARCH ───────────────────────────────────────────────────── #
 
@@ -806,8 +799,8 @@ class NyanSQLiteAIO:
             + page_sql
         )
 
-        rows = await self._run_db_call(lambda: self._conn.execute(sql, (query, *page_values)))
-        return [self._from_row(model, meta, r) for r in rows]
+        cols, rows = await self._run_db_call(lambda: self._conn.execute_rows(sql, (query, *page_values)))
+        return await asyncio.to_thread(self._from_rows, model, meta, cols, rows)
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 

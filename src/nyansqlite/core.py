@@ -20,7 +20,7 @@ from ._schema import (
     model_to_indexes,
     model_to_table_name,
 )
-from ._types import compile_deserializer, serialize_value
+from ._types import compile_deserializer, compile_serializer, serialize_value
 from ._update_validation import needs_row_validation, prepare_update
 from .exceptions import (
     FieldNotFoundError,
@@ -245,7 +245,7 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[i
 
 class _Meta:
     """モデルの内部メタデータ。"""
-    __slots__ = ("table", "pk", "hints", "decoders", "needs_row_validation", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_sql", "needs_row_validation", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -262,6 +262,10 @@ class _Meta:
         self.hints      = hints
         self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
                            for name, annotation in hints.items()}
+        self.encoders = {name: compile_serializer(annotation) for name, annotation in hints.items()}
+        cols = ", ".join(f'"{name}"' for name in hints)
+        ph = ", ".join("?" for _ in hints)
+        self.insert_sql = f'INSERT INTO "{table}" ({cols}) VALUES ({ph})'
         self.needs_row_validation = needs_row_validation(model)
         self.fts_table  = fts_table
         self.fts_fields = fts_fields
@@ -430,6 +434,11 @@ class NyanSQLite:
                 data[k] = decoder(v)
         return model(**data)
 
+    def _from_rows(self, model: type[M], meta: _Meta, cols: list[str], rows: list[tuple]) -> list[M]:
+        decoders = [(name, meta.decoders.get(name)) for name in cols]
+        return [model(**{name: decode(value) for (name, decode), value in zip(decoders, row)
+                         if decode is not None}) for row in rows]
+
     # ── INSERT ───────────────────────────────────────────────────────── #
 
     def insert(self, obj: M) -> M:
@@ -458,8 +467,7 @@ class NyanSQLite:
     def insert_many(self, objs: list[M]) -> int:
         """複数のモデルインスタンスを1つのトランザクションで一括挿入します。
 
-        SQLiteの変数バインド制限（デフォルト 32766）を考慮し、大きなデータセットは自動的に分割して挿入されます。
-        これにより、非常に大きなデータセットでのSQLITE_TOOBIGエラーを防ぎます。
+        executemany() で各行を順次シリアライズし、1つのトランザクションで挿入します。
 
         Args:
             objs (list[M]): 挿入するモデルインスタンスのリスト。
@@ -476,34 +484,20 @@ class NyanSQLite:
         if any(type(o) is not model_type for o in objs):
             raise TypeError("insert_many() には同じモデル型のインスタンスだけを渡してください。")
         meta = self._meta(model_type)
-        hints = meta.hints
-        fields = list(hints.keys())
+        fields = list(meta.hints)
 
-        # Pydantic v2 の高速な属性アクセスを利用
-        # model_dump() を介さず、serialize_value もインライン化に近い形で呼び出す
-        rows = []
-        for o in objs:
-            row_tuple = tuple(serialize_value(getattr(o, f), hints[f]) for f in fields)
-            rows.append(row_tuple)
-
-        cols_count = len(fields)
-        params_limit = 32000  # 控えめな制限
-        chunk_size = max(1, params_limit // cols_count)
-
-        total_inserted = 0
-        meta_table = meta.table
-        cols = ", ".join(f'"{k}"' for k in fields)
-        ph = ", ".join("?" for _ in range(cols_count))
-        sql = f'INSERT INTO "{meta_table}" ({cols}) VALUES ({ph})'  # nosec B608
+        # One INSERT statement is reused per row; SQLite's variable limit
+        # applies to that statement, not to the entire iterable.
+        encoders = tuple(meta.encoders[f] for f in fields)
+        def rows():
+            for obj in objs:
+                yield tuple(encode(getattr(obj, field)) for field, encode in zip(fields, encoders))
 
         with self._lock:
             with self._conn.transaction():
-                for chunk_start in range(0, len(rows), chunk_size):
-                    chunk = rows[chunk_start:chunk_start + chunk_size]
-                    self._conn.executemany(sql, chunk)
-                    total_inserted += len(chunk)
+                self._conn.executemany(meta.insert_sql, rows())
 
-        return total_inserted
+        return len(objs)
 
     # ── UPDATE ───────────────────────────────────────────────────────── #
 
@@ -648,8 +642,8 @@ class NyanSQLite:
             + page_sql
         )
         with self._lock:
-            rows = self._conn.execute(sql, tuple(values + page_values))
-        return [self._from_row(model, meta, r) for r in rows]
+            cols, rows = self._conn.execute_rows(sql, tuple(values + page_values))
+        return self._from_rows(model, meta, cols, rows)
 
     # ── SELECT (partial read) ─────────────────────────────────────────── #
 
@@ -754,8 +748,8 @@ class NyanSQLite:
             + page_sql
         )
         with self._lock:
-            rows = self._conn.execute(sql, (query, *page_values))
-        return [self._from_row(model, meta, r) for r in rows]
+            cols, rows = self._conn.execute_rows(sql, (query, *page_values))
+        return self._from_rows(model, meta, cols, rows)
 
     # ── COUNT / EXISTS ────────────────────────────────────────────────── #
 

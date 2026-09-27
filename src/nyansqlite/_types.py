@@ -13,6 +13,23 @@ except ImportError:  # pragma: no cover
 
 from ._markers import _NyanIndexedMarker, _NyanSearchableMarker
 
+try:
+    from pydantic_core import from_json as _pydantic_from_json
+except ImportError:  # pragma: no cover - Pydantic v2 normally provides this
+    _pydantic_from_json = None
+
+
+def _json_loads(value: str) -> Any:
+    """Use Pydantic Core's fast parser, preserving stdlib edge-case behavior."""
+    if _pydantic_from_json is not None:
+        try:
+            return _pydantic_from_json(value)
+        except ValueError:
+            # The stdlib accepts a few inputs (for example lone surrogate
+            # escapes) that the faster parser rejects. Keep that behavior.
+            pass
+    return json.loads(value)
+
 # ── annotation inspection ──────────────────────────────────────────────── #
 
 def is_indexed(annotation: Any) -> tuple[bool, bool]:
@@ -156,6 +173,29 @@ def serialize_value(value: Any, annotation: Any) -> Any:
     return value
 
 
+def compile_serializer(annotation: Any) -> Callable[[Any], Any]:
+    """Resolve a field's type once, retaining serialize_value's value rules."""
+    base, _ = resolve_type(annotation)
+    json_field = get_origin(base) in (dict, list)
+
+    def encode(value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, int):
+            return int(value) if isinstance(value, bool) else value
+        if isinstance(value, float):
+            return value
+        if isinstance(value, (dict, list)) or json_field:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        return value
+
+    return encode
+
+
 def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
     """Convert a SQLite scalar back to the correct Python type.
 
@@ -189,7 +229,7 @@ def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
     if origin in (dict, list) or base in (dict, list):
         if isinstance(value, str):
             try:
-                return json.loads(value)
+                return _json_loads(value)
             except (json.JSONDecodeError, ValueError) as e:
                 if strict:
                     raise ValueError(
@@ -255,7 +295,7 @@ def compile_deserializer(annotation: Any, strict: bool = False) -> Callable[[Any
             if not isinstance(value, str):
                 return value
             try:
-                return json.loads(value)
+                return _json_loads(value)
             except (json.JSONDecodeError, ValueError):
                 return deserialize_value(value, annotation, strict)
         return decode_json
