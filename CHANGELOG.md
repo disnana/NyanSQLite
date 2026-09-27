@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [1.1.6] - 2026-09-27
+
+### 🚀 Performance
+- Streamed `insert_many()` rows to SQLite within the existing transaction, and prepared field serializers and INSERT SQL when registering a model. SQLite's parameter limit applies to each execution of the single-row INSERT.
+- Decoded SQLite tuples directly into the dictionary validated by Pydantic. Normal JSON values use Pydantic Core's parser, with a fallback for values it rejects. Sync and async bulk conversion retain Pydantic validation; the async path runs bulk CPU work off the event loop.
+- Reused prepared statements when callers supply the same keyword filters in different orders. Added optional `statement_cache_size` to both constructors; the backend default is unchanged when omitted.
+- For ordinary models, used Pydantic Core's validator to reduce per-row construction overhead. Models with custom construction, model validators, or other incompatible features keep the constructor path.
+
+### 🧪 Benchmarks and tests
+- Restored sync and async benchmark suites and the result parser; benchmark workflow failures are no longer masked.
+- Added regression tests for large inserts and rollback, column order, Pydantic validators, asynchronous conversion, JSON edge cases, SQL parameter binding, and cache configuration.
+- In local Python 3.12 in-memory runs, the later model-read improvement changed the median for 1,000 rows from 1.974 to 1.671 ms (sync) and 3.044 to 2.626 ms (async). Reordering six keyword filters across 480 sync queries changed 8.964 to 4.955 ms. Async timings vary; fixed-order six-filter queries have a small overhead.
+
+---
+
 ## [1.1.5] - 2026-09-26
 
 ### 🚀 Performance
@@ -106,6 +121,21 @@
 ---
 
 # 更新履歴
+
+## [1.1.6] - 2026-09-27
+
+### 🚀 高速化
+- `insert_many()` の行を既存トランザクション内でSQLiteに順次渡し、モデル登録時にフィールド変換器とINSERT文を準備するようにしました。SQLiteのパラメータ上限は1行分のINSERTごとに適用されます。
+- SQLiteの行をPydanticへ渡す辞書に直接変換し、通常のJSON値にはPydantic Coreのパーサーを利用します。処理できない値は従来のパーサーに戻します。同期・非同期の一括処理ともPydantic検証を維持し、非同期の大量行変換はイベントループの外で実行します。
+- キーワード条件の指定順が変わってもSQL文キャッシュを再利用できるようにしました。両コンストラクタに任意の `statement_cache_size` を追加し、省略時は従来の既定値を維持します。
+- 通常のモデルではPydantic Coreの検証器を直接使い、行ごとの生成コストを減らしました。独自の初期化やモデル全体のバリデータなどがある場合は従来のコンストラクタを使います。
+
+### 🧪 ベンチマークとテスト
+- 同期・非同期のベンチマークと結果集計スクリプトを復旧し、ベンチマークの失敗をワークフローが隠さないようにしました。
+- 大量挿入とロールバック、列順、Pydanticバリデータ、非同期変換、JSONの特殊値、SQLパラメータの対応、キャッシュ設定の回帰テストを追加しました。
+- Python 3.12のメモリ内ローカル測定で、後段のモデル読み出し改善により1,000行の中央値は同期1.974→1.671 ms、非同期3.044→2.626 ms。6条件の順番を入れ替える同期480検索は8.964→4.955 msでした。非同期測定にはばらつきがあり、固定順の6条件検索には小さな処理増加があります。
+
+---
 
 ## [1.1.5] - 2026-09-26
 
