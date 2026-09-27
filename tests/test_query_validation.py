@@ -59,6 +59,11 @@ def test_compiled_deserializer_matches_direct_conversion(annotation, value):
     assert compile_deserializer(annotation)(value) == deserialize_value(value, annotation)
 
 
+def test_json_decoder_preserves_stdlib_surrogate_behavior():
+    value = r'{"text":"\ud800"}'
+    assert compile_deserializer(dict)(value) == deserialize_value(value, dict)
+
+
 @pytest.mark.parametrize("annotation,value", [
     (list[str], "not json"), (datetime, "not a date"), (date, "not a date"),
 ])
