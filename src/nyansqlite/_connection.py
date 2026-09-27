@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
+from numbers import Integral
 from typing import Any
 
 try:
@@ -24,16 +25,25 @@ class NyanConnection:
     _backend: str
     _conn: Any
 
-    def __init__(self, path: str, wal: bool = True):
+    def __init__(self, path: str, wal: bool = True, statement_cache_size: int | None = None):
+        if statement_cache_size is not None:
+            if isinstance(statement_cache_size, bool) or not isinstance(statement_cache_size, Integral):
+                raise ValueError("statement_cache_size must be a non-negative integer")
+            statement_cache_size = int(statement_cache_size)
+            if statement_cache_size < 0:
+                raise ValueError("statement_cache_size must be a non-negative integer")
+
         try:
             import apsw
 
-            self._conn    = apsw.Connection(path)
+            cache_options = {} if statement_cache_size is None else {"statementcachesize": statement_cache_size}
+            self._conn    = apsw.Connection(path, **cache_options)
             self._backend = "apsw"
         except ImportError:
             import sqlite3
 
-            self._conn               = sqlite3.connect(path, check_same_thread=False)
+            cache_options = {} if statement_cache_size is None else {"cached_statements": statement_cache_size}
+            self._conn               = sqlite3.connect(path, check_same_thread=False, **cache_options)
             self._conn.isolation_level = None   # manual transaction control
             self._backend            = "sqlite3"
 
