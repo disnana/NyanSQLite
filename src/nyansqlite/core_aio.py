@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from numbers import Integral
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
 
 from ._connection import NyanConnection
+from ._model import instance_values, validate_model
+from ._query import _build_where, _limit_sql, _order_sql, merge_where
 from ._schema import (
     check_fts_schema,
+    check_index_schema,
     check_table_schema,
     get_primary_key,
     model_hints,
@@ -21,8 +22,8 @@ from ._schema import (
     model_to_indexes,
     model_to_table_name,
 )
-from ._types import compile_deserializer, serialize_value
-from ._update_validation import needs_row_validation, prepare_update
+from ._types import compile_deserializer, resolve_type, serialize_value, unwrap_annotated
+from ._update_validation import needs_row_validation, prepare_update, update_validated_rows
 from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
@@ -34,211 +35,10 @@ from .exceptions import (
 M = TypeVar("M", bound=BaseModel)
 
 
-# ── WHERE clause builder ──────────────────────────────────────────────── #
-
-_OP_PATTERN = re.compile(r"^\s*(\w+)\s*(>=|<=|!=|>|<|=)\s*(.*)$")
-
-def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Optional[_Meta] = None) -> tuple[str, list[Any]]:
-    """Build a parameterised WHERE clause from string filters and keyword arguments.
-
-    String filters (args):
-        "views > 10", "status = 'active'"
-
-    Keyword filters (kwargs):
-        ==  ``field=value``           → ``field = ?``
-        ==  ``field__ne=value``       → ``field != ?``
-        ==  ``field__gt=value``       → ``field > ?``
-        ==  ``field__gte=value``      → ``field >= ?``
-        ==  ``field__lt=value``       → ``field < ?``
-        ==  ``field__lte=value``      → ``field <= ?``
-        ==  ``field__like=value``     → ``field LIKE ?``
-        ==  ``field__in=[…]``         → ``field IN (?,?,?)``
-        ==  ``field__is_null=True``   → ``field IS NULL``
-        ==  ``field__is_null=False``  → ``field IS NOT NULL``
-
-    Raises:
-        QueryValidationError: If type conversion of filter values fails
-    """
-    if not args and not kwargs:
-        return "", []
-
-    clauses: list[str] = []
-    values:  list[Any] = []
-
-    # Process positional string filters: "age > 10"
-    for filt in args:
-        match = _OP_PATTERN.match(filt)
-        if match:
-            field, op, val_str = match.groups()
-            if model_meta and field not in model_meta.hints:
-                raise FieldNotFoundError(
-                    f"Fields not found on model: ['{field}']. "
-                    f"Available: {list(model_meta.hints)}"
-                )
-            clauses.append(f'"{field}" {op} ?')
-            # Try to convert val_str to a Python literal (int, float, etc.)
-            # If it's a quoted string, strip quotes.
-            val_str = val_str.strip()
-            if (val_str.startswith("'") and val_str.endswith("'")) or \
-               (val_str.startswith('"') and val_str.endswith('"')):
-                values.append(val_str[1:-1])
-            elif val_str.isdigit() or (val_str.startswith("-") and val_str[1:].isdigit()):
-                values.append(int(val_str))
-            else:
-                try:
-                    values.append(float(val_str))
-                except ValueError:
-                    raise QueryValidationError(
-                        f"Unsafe or unsupported string filter: {filt!r}. "
-                        "Supported forms include `field = value`, `field > 10`, and `field = 'text'`."
-                    )
-        else:
-            # If it doesn't match our simple operator pattern,
-            # we might just pass it through, but it's risky for SQL injection.
-            # For now, let's only support the explicit operators.
-            raise QueryValidationError(
-                f"Unsafe or unsupported string filter: {filt!r}. "
-                "Use keyword filters or an explicit comparison operator."
-            )
-
-    # Process keyword filters: age__gt=10
-    for key, value in kwargs.items():
-        field_name = key.split("__")[0]
-        if model_meta and field_name not in model_meta.hints:
-            raise FieldNotFoundError(
-                f"Fields not found on model: ['{field_name}']. "
-                f"Available: {list(model_meta.hints)}"
-            )
-
-        serialized_value = value
-        # IN serializes each element below; serializing the whole collection
-        # first creates an unused JSON string for every query.
-        if model_meta and field_name in model_meta.hints and not key.endswith(("__in", "__is_null")):
-            serialized_value = serialize_value(value, model_meta.hints[field_name])
-
-        if "__" in key:
-            field, op = key.rsplit("__", 1)
-            q = f'"{field}"'
-            if op == "ne":
-                clauses.append(f"{q} != ?")
-                values.append(serialized_value)
-            elif op == "gt":
-                clauses.append(f"{q} > ?")
-                # Validate that value is a scalar that supports ordering.
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value > _ref
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"Type mismatch in filter {key}={value!r}. "
-                        f"Cannot apply '>' operator to {type(value).__name__}. "
-                        f"Error: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "gte":
-                clauses.append(f"{q} >= ?")
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value >= _ref
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"Type mismatch in filter {key}={value!r}. "
-                        f"Cannot apply '>=' operator to {type(value).__name__}. "
-                        f"Error: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "lt":
-                clauses.append(f"{q} < ?")
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value < _ref
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"Type mismatch in filter {key}={value!r}. "
-                        f"Cannot apply '<' operator to {type(value).__name__}. "
-                        f"Error: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "lte":
-                clauses.append(f"{q} <= ?")
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value <= _ref
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"Type mismatch in filter {key}={value!r}. "
-                        f"Cannot apply '<=' operator to {type(value).__name__}. "
-                        f"Error: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "like":
-                clauses.append(f"{q} LIKE ?")
-                values.append(serialized_value)
-            elif op == "in":
-                try:
-                    if not isinstance(value, (list, tuple, set)):
-                        raise TypeError("'in' filter value must be iterable.")
-                    if not value:
-                        clauses.append("0")
-                        continue
-                    ph = ", ".join("?" * len(value))
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"Filter {key} expects iterable, got {type(value).__name__}. "
-                        f"Error: {e}"
-                    ) from e
-                clauses.append(f"{q} IN ({ph})")
-                if model_meta and field_name in model_meta.hints:
-                    values.extend(serialize_value(v, model_meta.hints[field_name]) for v in value)
-                else:
-                    values.extend(value)
-            elif op == "is_null":
-                clauses.append(f"{q} IS {'NULL' if value else 'NOT NULL'}")
-            else:
-                raise ValueError(f"Unknown filter operator: __{op}")
-        elif value is None:
-            clauses.append(f'"{key}" IS NULL')
-        else:
-            clauses.append(f'"{key}" = ?')
-            values.append(serialized_value)
-
-    return "WHERE " + " AND ".join(clauses), values
-
-
-def _order_sql(order_by: Optional[str], desc: bool) -> str:
-    if not order_by:
-        return ""
-    return f' ORDER BY "{order_by}" {"DESC" if desc else "ASC"}'
-
-
-def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[int]]:
-    sql = ""
-    values: list[int] = []
-    if limit is not None:
-        if isinstance(limit, bool) or not isinstance(limit, Integral):
-            raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}")
-        limit_value = int(limit)
-        if limit_value < 0:
-            raise QueryValidationError(f"limit must be a non-negative integer: {limit!r}")
-        sql += " LIMIT ?"
-        values.append(limit_value)
-    if offset is not None:
-        if isinstance(offset, bool) or not isinstance(offset, Integral):
-            raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}")
-        offset_value = int(offset)
-        if offset_value < 0:
-            raise QueryValidationError(f"offset must be a non-negative integer: {offset!r}")
-        if limit is None:
-            sql += " LIMIT -1"
-        sql += " OFFSET ?"
-        values.append(offset_value)
-    return sql, values
-
-
-# ── internal model metadata ───────────────────────────────────────────── #
+# ── internal model metadata ──────────────────────────────────────────────── #
 
 class _Meta:
-    __slots__ = ("table", "pk", "hints", "decoders", "needs_row_validation", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "filter_bases", "decoders", "needs_row_validation", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -253,6 +53,8 @@ class _Meta:
         self.table      = table
         self.pk         = pk
         self.hints      = hints
+        self.filter_bases = {name: unwrap_annotated(resolve_type(annotation)[0])
+                             for name, annotation in hints.items()}
         self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
                            for name, annotation in hints.items()}
         self.needs_row_validation = needs_row_validation(model)
@@ -376,16 +178,6 @@ class NyanSQLiteAIO:
         hints  = model_hints(model)
 
         # Check for table name collisions with different models
-        for existing_model, meta in self._registry.items():
-            if meta.table == table and existing_model is not model:
-                raise TableNameCollisionError(
-                    f"Table name collision detected: "
-                    f"{existing_model.__name__} → '{table}' but also "
-                    f"{model.__name__} → '{table}'. "
-                    f"This can happen with CamelCase variants (e.g., 'UserAuth' and 'User_Auth'). "
-                    f"Use explicit __tablename__ override or rename one of the models."
-                )
-
         fts_create, fts_triggers = model_to_fts5(model)
         fts_table:  str | None = None
         fts_fields: list[str]  = []
@@ -395,6 +187,15 @@ class NyanSQLiteAIO:
             fts_fields = [f for f, ann in hints.items() if is_searchable(ann)]
 
         async with self._write_context():
+            for existing_model, meta in self._registry.items():
+                if meta.table == table and existing_model is not model:
+                    raise TableNameCollisionError(
+                        f"Table name collision detected: "
+                        f"{existing_model.__name__} → '{table}' but also "
+                        f"{model.__name__} → '{table}'. "
+                        f"This can happen with CamelCase variants (e.g., 'UserAuth' and 'User_Auth'). "
+                        f"Use explicit __tablename__ override or rename one of the models."
+                    )
             def _register_all() -> None:
                 with self._conn.transaction():
                     self._conn.execute(model_to_ddl(model))
@@ -410,6 +211,7 @@ class NyanSQLiteAIO:
                     )
                     for idx_sql in model_to_indexes(model):
                         self._conn.execute(idx_sql)
+                    check_index_schema(model, self._conn)
                     if fts_create:
                         self._conn.execute(fts_create)
                         for trig in fts_triggers:
@@ -419,11 +221,11 @@ class NyanSQLiteAIO:
 
             await self._run_db_call(_register_all)
 
-        self._registry[model] = _Meta(
-            table=table, pk=pk, hints=hints, model=model,
-            strict_deserialization=self._strict_deserialization,
-            fts_table=fts_table, fts_fields=fts_fields,
-        )
+            self._registry[model] = _Meta(
+                table=table, pk=pk, hints=hints, model=model,
+                strict_deserialization=self._strict_deserialization,
+                fts_table=fts_table, fts_fields=fts_fields,
+            )
 
     def _meta(self, model: type[BaseModel]) -> _Meta:
         meta = self._registry.get(model)
@@ -438,13 +240,7 @@ class NyanSQLiteAIO:
 
     def _to_row(self, obj: BaseModel, meta: _Meta) -> dict[str, Any]:
         """Pydantic model → serialised dict for SQLite."""
-        if hasattr(obj, "model_dump"):
-            dump = obj.model_dump()
-        else:
-            dump = obj.dict()
-
-        hints = meta.hints
-        return {k: serialize_value(v, hints[k]) for k, v in dump.items() if k in hints}
+        return dict(zip(meta.hints, instance_values(obj, meta.hints)))
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
         """SQLite row dict → Pydantic model.
@@ -465,7 +261,7 @@ class NyanSQLiteAIO:
             decoder = meta.decoders.get(k)
             if decoder is not None:
                 data[k] = decoder(v)
-        return model(**data)
+        return validate_model(model, data)
 
     # ── INSERT ───────────────────────────────────────────────────────── #
 
@@ -524,9 +320,8 @@ class NyanSQLiteAIO:
 
         # SQLite default limit on parameters is 32766
         rows = []
-        for o in objs:
-            row_tuple = tuple(serialize_value(getattr(o, f), hints[f]) for f in fields)
-            rows.append(row_tuple)
+        for obj in objs:
+            rows.append(instance_values(obj, hints))
 
         cols_count = len(fields)
         params_limit = 32000  # Conservative limit
@@ -554,7 +349,7 @@ class NyanSQLiteAIO:
 
     async def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> int:
         """指定されたフィールドのみを更新する部分更新を行います。
-        Partial update — only the specified *fields* are written.
+        Partial update; normalized and validator-derived fields are persisted together.
 
         Args:
             model (type[BaseModel]): 更新対象のモデルクラス。
@@ -582,9 +377,10 @@ class NyanSQLiteAIO:
 
         set_parts: list[str] = []
         set_vals:  list[Any] = []
-        for fname, value in fields.items():
-            set_parts.append(f'"{fname}" = ?')
-            set_vals.append(serialize_value(value, meta.hints[fname]))
+        if not needs_rows:
+            for fname, value in fields.items():
+                set_parts.append(f'"{fname}" = ?')
+                set_vals.append(serialize_value(value, meta.hints[fname]))
 
         where_clause, where_vals = _build_where((), where, model_meta=meta)
         sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'  # nosec B608
@@ -593,14 +389,7 @@ class NyanSQLiteAIO:
             def _update_validated() -> int:
                 with self._conn.transaction():
                     if needs_rows:
-                        rows = self._conn.execute(f'SELECT * FROM "{meta.table}" {where_clause}', tuple(where_vals))
-                        for row in rows:
-                            candidate = {
-                                name: meta.decoders[name](value)
-                                for name, value in row.items() if name in meta.hints
-                            }
-                            candidate.update(fields)
-                            model.model_validate(candidate)
+                        return update_validated_rows(model, meta, self._conn, where_clause, where_vals, fields)
                     return self._execute_and_return_changes(sql, tuple(set_vals + where_vals))
 
             return await self._run_db_call(_update_validated)
@@ -624,7 +413,7 @@ class NyanSQLiteAIO:
                  Number of rows deleted.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(kwargs.pop("where", None), kwargs), model_meta=meta)
         sql = f'DELETE FROM "{meta.table}" {where_clause}'  # nosec B608
 
         async with self._write_context():
@@ -650,7 +439,7 @@ class NyanSQLiteAIO:
             Optional[M]: 取得されたモデルインスタンス、または None。
                          The retrieved model instance, or None.
         """
-        results = await self.query(model, *filters, limit=1, **kwargs)
+        results = await self.query(model, *filters, limit=1, where=merge_where(kwargs.pop("where", None), kwargs))
         return results[0] if results else None
 
     async def query(
@@ -661,6 +450,7 @@ class NyanSQLiteAIO:
         offset:   Optional[int] = None,
         order_by: Optional[str] = None,
         desc:     bool = False,
+        where:    Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> list[M]:
         """フィルタリング、ソート、ページネーションを使用して行を検索します。
@@ -677,6 +467,7 @@ class NyanSQLiteAIO:
                                    Number of rows to skip.
             order_by (Optional[str]): ソートに使用するフィールド名。
                                      Field name to order by.
+            where (dict): 条件辞書。予約引数と同名のフィールドにも使用できます。
             desc (bool): 降順でソートするかどうか。デフォルトは False（昇順）。
                         Whether to order in descending order. Defaults to False (ascending).
             **kwargs (Any): キーワード形式のフィルタ条件。
@@ -687,7 +478,7 @@ class NyanSQLiteAIO:
                      List of matching model instances.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(where, kwargs), model_meta=meta)
 
         if order_by:
             meta.check_fields([order_by], model.__name__)
@@ -713,6 +504,7 @@ class NyanSQLiteAIO:
         offset:   Optional[int] = None,
         order_by: Optional[str] = None,
         desc:     bool = False,
+        where:    Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """特定のフィールドのみを辞書のリストとして取得します（部分読み込み）。
@@ -731,6 +523,7 @@ class NyanSQLiteAIO:
                                    Offset.
             order_by (Optional[str]): ソートに使用するフィールド名。
                                      Field name to order by.
+            where (dict): 条件辞書。予約引数と同名のフィールドにも使用できます。
             desc (bool): 降順にするかどうか。
                         Descending order.
             **kwargs (Any): キーワード形式のフィルタ条件。
@@ -741,12 +534,14 @@ class NyanSQLiteAIO:
                                  List of dicts containing specified fields.
         """
         meta = self._meta(model)
+        if not fields:
+            raise QueryValidationError("select() requires at least one field")
         meta.check_fields(fields, model.__name__)
         if order_by:
             meta.check_fields([order_by], model.__name__)
 
         col_sql      = ", ".join(f'"{f}"' for f in fields)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(where, kwargs), model_meta=meta)
         page_sql, page_values = _limit_sql(limit, offset)
         sql = (
             f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'  # nosec B608
@@ -828,7 +623,7 @@ class NyanSQLiteAIO:
                  Number of matching rows.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(kwargs.pop("where", None), kwargs), model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'  # nosec B608
 
         rows = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values)))
@@ -851,7 +646,7 @@ class NyanSQLiteAIO:
                   True if matching rows exist, False otherwise.
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(kwargs.pop("where", None), kwargs), model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'  # nosec B608
 
         result = await self._run_db_call(lambda: self._conn.execute(sql, tuple(values)))
@@ -917,20 +712,13 @@ class NyanSQLiteAIO:
             >>>     # Raise error to rollback
         """
         async with self._write_context():
-            # Implementation: Start transaction, yield, then commit/rollback
-            in_tx_already = await self._run_db_call(self._conn.in_transaction)
-
+            scope = self._conn.transaction_scope()
             try:
-                if not in_tx_already:
-                    await self._run_db_call(lambda: self._conn._raw("BEGIN"))
+                await self._run_db_call(scope.begin)
                 yield
-                if not in_tx_already:
-                    await self._run_db_call(lambda: self._conn._raw("COMMIT"))
+                await self._run_db_call(scope.commit)
             except BaseException:
-                # A cancelled thread may have completed BEGIN or COMMIT before
-                # cancellation is delivered back to this coroutine.
-                if not in_tx_already and await self._run_db_call(self._conn.in_transaction):
-                    await self._run_db_call(lambda: self._conn._raw("ROLLBACK"))
+                await self._run_db_call(scope.rollback)
                 raise
 
     # ── context manager + info ────────────────────────────────────────── #

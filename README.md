@@ -604,6 +604,7 @@ try:
     db.register(User_Auth)  # TableNameCollisionError
 except TableNameCollisionError as e:
     print(f"Table name collision: {e}")
+```
 
 ### 🔗 Resources
 

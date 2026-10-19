@@ -25,6 +25,7 @@ class NyanConnection:
     _conn: Any
 
     def __init__(self, path: str, wal: bool = True):
+        self._savepoint_counter = 0
         try:
             import apsw
 
@@ -96,17 +97,17 @@ class NyanConnection:
 
     @contextmanager
     def transaction(self) -> Generator[None, None, None]:
-        if self.in_transaction():
-            yield
-            return
-
-        self._raw("BEGIN")
+        scope = self.transaction_scope()
+        scope.begin()
         try:
             yield
-            self._raw("COMMIT")
+            scope.commit()
         except BaseException:
-            self._raw("ROLLBACK")
+            scope.rollback()
             raise
+
+    def transaction_scope(self) -> _TransactionScope:
+        return _TransactionScope(self)
 
     # ── util ─────────────────────────────────────────────────────────── #
 
@@ -123,3 +124,39 @@ class NyanConnection:
     @property
     def backend(self) -> str:
         return self._backend
+
+
+class _TransactionScope:
+    """State survives cancellation of an async caller while its worker finishes."""
+
+    def __init__(self, connection: NyanConnection):
+        self.connection = connection
+        self.savepoint: str | None = None
+        self.active = False
+
+    def begin(self) -> None:
+        if self.connection.in_transaction():
+            self.connection._savepoint_counter += 1
+            self.savepoint = f"nyan_sp_{self.connection._savepoint_counter}"
+            self.connection._raw(f'SAVEPOINT "{self.savepoint}"')
+        else:
+            self.connection._raw("BEGIN")
+        self.active = True
+
+    def commit(self) -> None:
+        if self.savepoint:
+            self.connection._raw(f'RELEASE SAVEPOINT "{self.savepoint}"')
+        else:
+            self.connection._raw("COMMIT")
+        self.active = False
+
+    def rollback(self) -> None:
+        if not self.active:
+            return
+        if self.connection.in_transaction():
+            if self.savepoint:
+                self.connection._raw(f'ROLLBACK TO SAVEPOINT "{self.savepoint}"')
+                self.connection._raw(f'RELEASE SAVEPOINT "{self.savepoint}"')
+            else:
+                self.connection._raw("ROLLBACK")
+        self.active = False

@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## Unreleased
+
+### Fixed
+- Failed nested transactions and bulk writes now roll back their own scope using savepoints; caught errors no longer leave partially saved batches.
+- Updates persist normalized values and related fields produced by validators, with all affected rows protected by one transaction.
+- Registration rejects incompatible existing index definitions, including missing uniqueness, incorrect column order, partial indexes, and collation changes.
+- Single and bulk inserts share validation and persistence behavior, including mutated instances, aliases, excluded output fields, nested models, and ordinary Enums in JSON.
+- Class variables and private attributes no longer become database columns. Explicit `__tablename__` overrides are supported.
+- Sync and async filters share type validation. `__ne=None` selects non-NULL rows, `__is_null` requires bool, and empty projections report a clear error.
+
+### Added
+- A `where` filter dict for reserved argument names, consistently supported across reads and deletes. `__eq` is also available for explicit equality.
+- Regression coverage for both APSW and sqlite3, synchronous and asynchronous APIs, plus cancellation during nested transaction setup.
+
+### Compatibility
+- `Field(exclude=True)` controls Pydantic output only; database persistence includes all model fields. Remove fields from the persistence model to prevent storage.
+- Existing malformed Enum JSON and incompatible database schemas require explicit migration; they are not rewritten automatically.
+- Catching an inner transaction failure preserves other outer work. An exception escaping the outermost block still rolls back the entire transaction.
+
 ## [1.1.5] - 2026-09-26
 
 ### 🚀 Performance

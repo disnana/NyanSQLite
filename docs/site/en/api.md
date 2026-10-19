@@ -256,7 +256,7 @@ The retrieved model instance, or None.
 ### `query`
 
 ```python
-def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[M]
+def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[M]
 ```
 
 Query rows with optional filtering, ordering, and pagination.
@@ -298,7 +298,7 @@ List of matching model instances.
 ### `select`
 
 ```python
-def select(model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[dict[str, Any]]
+def select(model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[dict[str, Any]]
 ```
 
 Partial read — fetch only *fields*, returned as plain dicts.
@@ -502,3 +502,13 @@ List of result rows as dicts.
 
 ---
 
+
+
+## The `where` filter dict
+
+Filter dict, including fields named like reserved arguments; combined with keyword filters.
+
+```python
+db.query(Job, where={"limit": 10}, limit=20)
+db.select(Job, ["id"], where={"limit": 10})
+```

@@ -5,11 +5,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-try:
-    from typing import get_type_hints
-except ImportError:  # pragma: no cover
-    from typing_extensions import get_type_hints
-
 from ._markers import CompositeIndex
 from ._types import is_indexed, is_searchable, python_type_to_sqlite, resolve_type
 from .exceptions import SchemaMismatchError
@@ -21,14 +16,16 @@ _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 def quote_identifier(identifier: str) -> str:
     """Validate and quote an internally generated SQLite identifier."""
-    if not _IDENTIFIER_PATTERN.fullmatch(identifier):
+    if not isinstance(identifier, str) or not _IDENTIFIER_PATTERN.fullmatch(identifier):
         raise ValueError(f"Invalid SQLite identifier: {identifier!r}")
     return f'"{identifier}"'
 
 
 def model_to_table_name(model: type[BaseModel]) -> str:
     """``CamelCase`` → ``snake_case``."""
-    table = re.sub(r"(?<!^)(?=[A-Z])", "_", model.__name__).lower()
+    table = getattr(model, "__tablename__", None)
+    if table is None:
+        table = re.sub(r"(?<!^)(?=[A-Z])", "_", model.__name__).lower()
     quote_identifier(table)
     return table
 
@@ -38,13 +35,16 @@ def get_primary_key(model: type[BaseModel]) -> Optional[str]:
     # Explicit override
     pk = getattr(model, "__nyan_primary_key__", None)
     if pk:
+        if pk not in model.model_fields:
+            raise ValueError(f"Unknown primary key field: {pk!r}")
         return pk
-    hints = get_type_hints(model, include_extras=True)
-    return "id" if "id" in hints else None
+    return "id" if "id" in model.model_fields else None
 
 
 def model_hints(model: type[BaseModel]) -> dict[str, Any]:
-    return get_type_hints(model, include_extras=True)
+    if not model.model_fields:
+        raise ValueError("A registered model must have at least one persistent field")
+    return {name: field.rebuild_annotation() for name, field in model.model_fields.items()}
 
 
 # ── DDL ────────────────────────────────────────────────────────────────── #
@@ -121,12 +121,12 @@ def check_fts_schema(
 
 # ── indexes ─────────────────────────────────────────────────────────────── #
 
-def model_to_indexes(model: type[BaseModel]) -> list[str]:
-    """Generate ``CREATE [UNIQUE] INDEX IF NOT EXISTS …`` statements."""
+def index_specs(model: type[BaseModel]) -> dict[str, tuple[tuple[str, ...], bool]]:
+    """One source of truth for index creation and existing-schema checks."""
     table  = model_to_table_name(model)
     pk     = get_primary_key(model)
     hints  = model_hints(model)
-    stmts: list[str] = []
+    specs: dict[str, tuple[tuple[str, ...], bool]] = {}
 
     # Per-field indexes from Indexed[T] / UniqueIndexed[T]
     for field_name, annotation in hints.items():
@@ -135,11 +135,8 @@ def model_to_indexes(model: type[BaseModel]) -> list[str]:
         indexed, unique = is_indexed(annotation)
         if not indexed:
             continue
-        u   = "UNIQUE " if unique else ""
         idx = f"idx_{table}_{field_name}"
-        stmts.append(
-            f'CREATE {u}INDEX IF NOT EXISTS "{idx}" ON "{table}"("{field_name}")'
-        )
+        specs[idx] = ((field_name,), unique)
 
     # Composite indexes from __nyan_indexes__
     for ci in getattr(model, "__nyan_indexes__", []):
@@ -153,14 +150,41 @@ def model_to_indexes(model: type[BaseModel]) -> list[str]:
             )
         for field in ci.fields:
             quote_identifier(field)
-        u       = "UNIQUE " if ci.unique else ""
         idx     = f'idx_{table}_{"_".join(ci.fields)}'
-        col_sql = ", ".join(f'"{f}"' for f in ci.fields)
-        stmts.append(
-            f'CREATE {u}INDEX IF NOT EXISTS "{idx}" ON "{table}"({col_sql})'
-        )
+        spec = (ci.fields, ci.unique)
+        if idx in specs and specs[idx] != spec:
+            raise ValueError(f"Conflicting index definitions: {idx}")
+        specs[idx] = spec
+    return specs
+
+
+def model_to_indexes(model: type[BaseModel]) -> list[str]:
+    table = model_to_table_name(model)
+    stmts = []
+    for name, (fields, unique) in index_specs(model).items():
+        columns = ", ".join(quote_identifier(field) for field in fields)
+        qualifier = "UNIQUE " if unique else ""
+        stmts.append(f'CREATE {qualifier}INDEX IF NOT EXISTS "{name}" ON "{table}"({columns})')
 
     return stmts
+
+
+def check_index_schema(model: type[BaseModel], connection: Any) -> None:
+    table = model_to_table_name(model)
+    existing = {row["name"]: row for row in connection.execute(f'PRAGMA index_list("{table}")')}
+    for name, (fields, unique) in index_specs(model).items():
+        actual = existing.get(name)
+        columns = connection.execute(f'PRAGMA index_xinfo("{name}")')
+        keys = [column for column in columns if column["key"]]
+        if (
+            actual is None or bool(actual["unique"]) != unique or actual["partial"]
+            or tuple(column["name"] for column in keys) != fields
+            or any(column["desc"] or column["coll"].upper() != "BINARY" for column in keys)
+        ):
+            raise SchemaMismatchError(
+                f"Existing index '{name}' differs from model {model.__name__}. "
+                "Migrate the index before register()."
+            )
 
 
 # ── FTS5 virtual table + sync triggers ────────────────────────────────── #

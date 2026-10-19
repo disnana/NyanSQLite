@@ -5,6 +5,9 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
+from ._model import validate_model
+from ._types import serialize_value
+
 
 def needs_row_validation(model: type[BaseModel]) -> bool:
     """Use full models when validation can depend on other fields or config."""
@@ -36,3 +39,22 @@ def prepare_update(
     if needs_rows or any(name not in model.model_fields for name in fields):
         return fields, True
     return {name: _adapter(model, name).validate_python(value) for name, value in fields.items()}, False
+
+
+def update_validated_rows(model, meta, connection, where_clause, where_values, fields) -> int:
+    """Apply all fields produced by row-dependent validators, atomically."""
+    rows = connection.execute(
+        f'SELECT _rowid_ AS "__nyan_rowid__", * FROM "{meta.table}" {where_clause}', tuple(where_values)
+    )
+    names = tuple(meta.hints)
+    updates = []
+    for row in rows:
+        candidate = {name: meta.decoders[name](row[name]) for name in names}
+        candidate.update(fields)
+        validated = validate_model(model, candidate)
+        updates.append(tuple(serialize_value(getattr(validated, name), meta.hints[name]) for name in names)
+                       + (row["__nyan_rowid__"],))
+    if updates:
+        assignments = ", ".join(f'"{name}" = ?' for name in names)
+        connection.executemany(f'UPDATE "{meta.table}" SET {assignments} WHERE _rowid_ = ?', updates)
+    return len(updates)

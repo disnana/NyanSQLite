@@ -39,7 +39,7 @@ def insert_many(self, objs: list[BaseModel]) -> None
 
 ### `query`
 ```python
-def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[M]
+def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[M]
 ```
 Djangoライクなフィルタリングを使用してデータを検索し、モデルインスタンスのリストを返します。
 
@@ -57,7 +57,7 @@ def get(self, model: type[M], *filters: str, **kwargs: Any) -> Optional[M]
 
 ### `update`
 ```python
-def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> None
+def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> int
 ```
 条件（`where`）に一致するレコードを指定した値（`fields`）で更新します。
 
@@ -91,7 +91,7 @@ def exists(self, model: type[BaseModel], *filters: str, **kwargs: Any) -> bool
 
 ### `select`
 ```python
-def select(self, model: type[BaseModel], fields: list[str], *filters: str, **kwargs: Any) -> list[dict[str, Any]]
+def select(self, model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[dict[str, Any]]
 ```
 特定のフィールドのみを取得し、辞書のリストとして返します。
 
@@ -128,3 +128,13 @@ def backend(self) -> NyanConnection
 def registered_models(self) -> list[type[BaseModel]]
 ```
 現在登録されているモデルのリストを返します。
+
+
+## 条件辞書 `where`
+
+予約引数と同名の列にも使える条件辞書。キーワード条件と併用できます。
+
+```python
+db.query(Job, where={"limit": 10}, limit=20)
+db.select(Job, ["id"], where={"limit": 10})
+```

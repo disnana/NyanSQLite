@@ -4,31 +4,57 @@ NyanSQLiteは、SQLiteのトランザクション機能を安全かつ簡単に�
 
 ## NyanSQLiteのトランザクション
 
-NyanSQLiteの `insert_many` メソッドは、内部で自動的にトランザクションを使用します。これにより、大量のデータを高速に、かつアトミックに（すべて成功するかすべて失敗するか）挿入できます。
+NyanSQLiteの `insert_many` などの一括処理メソッドは、内部で自動的にトランザクションを使用します。これにより、大量のデータを高速に、かつアトミックに（すべて成功するかすべて失敗するか）処理できます。
 
 ### 内部的な挙動
 
 NyanSQLiteは、一括処理の際に以下のステップを実行します：
 
 1. `BEGIN` (または `BEGIN IMMEDIATE`) を発行
-2. データをチャンク分割して挿入
+2. データをチャンク分割して処理
 3. すべて成功すれば `COMMIT`
 4. 途中でエラーが発生すれば `ROLLBACK`
 
-## 手動でのトランザクション管理
+## 手動でのトランザクション管理 (`atomic`)
 
-現在の NyanSQLite では、APSW の接続オブジェクトを直接取得してトランザクションを制御することも可能です。
+`atomic()` コンテキストマネージャを使用すると、複数の操作を一つのトランザクションとして明示的にまとめることができます。
+
+### 同期版 (NyanSQLite)
 
 ```python
 from nyansqlite import NyanSQLite
 
 db = NyanSQLite("app.db")
 
-# APSW 接続オブジェクトを介したトランザクション
-with db.backend().transaction():
+with db.atomic():
     db.insert(item1)
     db.insert(item2)
-    # 例外が発生すると自動的にロールバックされます
+    # 例外が発生すると、自動的にロールバックされます
+```
+
+### 非同期版 (NyanSQLiteAIO)
+
+```python
+from nyansqlite import NyanSQLiteAIO
+
+db = NyanSQLiteAIO("app.db")
+
+async with db.atomic():
+    await db.insert(item1)
+    await db.insert(item2)
+    # 例外が発生すると、自動的にロールバックされます
+```
+
+### ネスト（入れ子）されたトランザクション
+
+`atomic()` はネスト可能です。内側のブロックや一括操作はSAVEPOINTで保護され、失敗した範囲だけがロールバックされます。例外を外側で捕捉すると、外側のほかの操作は続行できます。例外が一番外側のブロックまで伝播した場合は、全体がロールバックされます。コミットは一番外側のブロックが正常終了したときに行われます。
+
+```python
+with db.atomic():
+    db.insert(item1)
+    with db.atomic(): # 内部のトランザクション
+        db.insert(item2)
+    # ここでコミットされます
 ```
 
 ## パフォーマンス最適化
@@ -38,11 +64,11 @@ with db.backend().transaction():
 ### ベストプラクティス
 
 1. **一括挿入には `insert_many` を使用する**: 自分でループを回して `insert` を呼び出すよりもはるかに高速です。
-2. **適切なチャンクサイズ**: NyanSQLiteは、SQLiteのプレースホルダ上限（32,766）に合わせて自動的にデータを分割して処理します。
+2. **適切な範囲を `atomic()` で囲む**: 関連する複数の更新操作は一つの `atomic()` ブロックにまとめることで、データの整合性を保ち、パフォーマンスを向上させます。
 3. **WALモードの活用**: NyanSQLiteはデフォルトで WAL（Write-Ahead Logging）モードを有効にします。これにより、書き込み中でも読み込みをブロックせず、高い並行性を維持できます。
 
 ## 関連リファレンス
 
-- [NyanSQLite API リファレンス](../api/NyanSQLite.md)
+- [NyanSQLite API リファレンス](../api/nyansqlite)
 - [APSW トランザクション・ドキュメント](https://rogerbinns.github.io/apsw/connection.html#apsw.Connection.transaction)
 

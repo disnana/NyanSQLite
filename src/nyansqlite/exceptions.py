@@ -27,7 +27,7 @@ class SchemaMismatchError(NyanSQLiteError):
 
     pass
 
-class QueryValidationError(NyanSQLiteError):
+class QueryValidationError(NyanSQLiteError, ValueError):
     """クエリパラメータの型変換に失敗した場合にスローされます.
 
     通常、クライアント側での不正な入力パラメータ（例: age__gt='not_a_number'）が原因です。

@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-import re
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
-from numbers import Integral
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
 
 from ._connection import NyanConnection
+from ._model import instance_values, validate_model
+from ._query import _build_where, _limit_sql, _order_sql, merge_where
 from ._schema import (
     check_fts_schema,
+    check_index_schema,
     check_table_schema,
     get_primary_key,
     model_hints,
@@ -20,8 +21,8 @@ from ._schema import (
     model_to_indexes,
     model_to_table_name,
 )
-from ._types import compile_deserializer, serialize_value
-from ._update_validation import needs_row_validation, prepare_update
+from ._types import compile_deserializer, resolve_type, serialize_value, unwrap_annotated
+from ._update_validation import needs_row_validation, prepare_update, update_validated_rows
 from .exceptions import (
     FieldNotFoundError,
     ModelNotRegisteredError,
@@ -33,219 +34,11 @@ from .exceptions import (
 M = TypeVar("M", bound=BaseModel)
 
 
-# ── WHERE clause builder ──────────────────────────────────────────────── #
-
-_OP_PATTERN = re.compile(r"^\s*(\w+)\s*(>=|<=|!=|>|<|=)\s*(.*)$")
-
-def _build_where(args: tuple[str, ...], kwargs: dict[str, Any], model_meta: Optional[_Meta] = None) -> tuple[str, list[Any]]:
-    """パラメータ化されたWHERE句を文字列フィルタとキーワード引数から構築します。
-
-    文字列フィルタ (args):
-        "views > 10", "status = 'active'"
-
-    キーワードフィルタ (kwargs):
-        ==  ``field=value``           → ``field = ?``
-        ==  ``field__ne=value``       → ``field != ?``
-        ==  ``field__gt=value``       → ``field > ?``
-        ==  ``field__gte=value``      → ``field >= ?``
-        ==  ``field__lt=value``       → ``field < ?``
-        ==  ``field__lte=value``      → ``field <= ?``
-        ==  ``field__like=value``     → ``field LIKE ?``
-        ==  ``field__in=[…]``         → ``field IN (?,?,?)``
-        ==  ``field__is_null=True``   → ``field IS NULL``
-        ==  ``field__is_null=False``  → ``field IS NOT NULL``
-
-    Raises:
-        QueryValidationError: フィルタ値の型変換に失敗した場合
-        FieldNotFoundError: 指定されたフィールドがモデルに存在しない場合
-    """
-    if not args and not kwargs:
-        return "", []
-
-    clauses: list[str] = []
-    values:  list[Any] = []
-
-    # 位置指定文字列フィルタを処理: "age > 10"
-    for filt in args:
-        match = _OP_PATTERN.match(filt)
-        if match:
-            field, op, val_str = match.groups()
-            if model_meta and field not in model_meta.hints:
-                raise FieldNotFoundError(
-                    f"モデルにフィールド '{field}' が見つかりません。 "
-                    f"利用可能なフィールド: {list(model_meta.hints.keys())}"
-                )
-            clauses.append(f'"{field}" {op} ?')
-            # val_strをPythonリテラル(int, floatなど)に変換を試みる
-            # 引用符で囲まれた文字列の場合、引用符を削除
-            val_str = val_str.strip()
-            if (val_str.startswith("'") and val_str.endswith("'")) or \
-               (val_str.startswith('"') and val_str.endswith('"')):
-                values.append(val_str[1:-1])
-            elif val_str.isdigit() or (val_str.startswith("-") and val_str[1:].isdigit()):
-                values.append(int(val_str))
-            else:
-                try:
-                    values.append(float(val_str))
-                except ValueError:
-                    raise QueryValidationError(
-                        f"安全でない、または未対応の文字列フィルタです: {filt!r}。 "
-                        "サポート形式は `field = value`, `field > 10`, `field = 'text'` です。"
-                    )
-        else:
-            # シンプルな演算子パターンに一致しない場合、SQLインジェクションのリスクがあるため、
-            # 現時点では明示的な演算子のみをサポート
-            raise QueryValidationError(
-                f"安全でない、または未対応の文字列フィルタです: {filt!r}。 "
-                "キーワード引数または明示的な比較演算子を使用してください。"
-            )
-
-    # キーワードフィルタを処理: age__gt=10
-    for key, value in kwargs.items():
-        field_name = key.split("__")[0]
-        if model_meta and field_name not in model_meta.hints:
-            raise FieldNotFoundError(
-                f"モデルにフィールド '{field_name}' が見つかりません。 "
-                f"利用可能なフィールド: {list(model_meta.hints.keys())}"
-            )
-
-        # モデルのヒントに基づいて値をシリアライズ
-        serialized_value = value
-        # IN serializes each element below; serializing the whole collection
-        # first creates an unused JSON string for every query.
-        if model_meta and field_name in model_meta.hints and not key.endswith(("__in", "__is_null")):
-            serialized_value = serialize_value(value, model_meta.hints[field_name])
-
-        if "__" in key:
-            field, op = key.rsplit("__", 1)
-            q = f'"{field}"'
-            if op == "ne":
-                clauses.append(f"{q} != ?")
-                values.append(serialized_value)
-            elif op == "gt":
-                clauses.append(f"{q} > ?")
-                # 値が比較可能であることを検証
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value > _ref  # シンプルな型チェック
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"フィルタ {key}={value!r} で型不一致が発生しました。 "
-                        f"'{type(value).__name__}' に '>' 演算子を適用できません。 "
-                        f"エラー: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "gte":
-                clauses.append(f"{q} >= ?")
-                # 値が比較可能であることを検証
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value >= _ref  # シンプルな型チェック
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"フィルタ {key}={value!r} で型不一致が発生しました。 "
-                        f"'{type(value).__name__}' に '>=' 演算子を適用できません。 "
-                        f"エラー: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "lt":
-                clauses.append(f"{q} < ?")
-                # 値が比較可能であることを検証
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value < _ref  # シンプルな型チェック
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"フィルタ {key}={value!r} で型不一致が発生しました。 "
-                        f"'{type(value).__name__}' に '<' 演算子を適用できません。 "
-                        f"エラー: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "lte":
-                clauses.append(f"{q} <= ?")
-                # 値が比較可能であることを検証
-                try:
-                    _ref = serialized_value
-                    _ = serialized_value <= _ref  # シンプルな型チェック
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"フィルタ {key}={value!r} で型不一致が発生しました。 "
-                        f"'{type(value).__name__}' に '<=' 演算子を適用できません。 "
-                        f"エラー: {e}"
-                    ) from e
-                values.append(serialized_value)
-            elif op == "like":
-                clauses.append(f"{q} LIKE ?")
-                values.append(serialized_value)
-            elif op == "in":
-                try:
-                    # 'in' 演算子には値がイテラブルであることを確認
-                    if not isinstance(value, (list, tuple, set)):
-                        raise TypeError("'in' 演算子の値はイテラブルである必要があります。")
-                    if not value:
-                        clauses.append("0")
-                        continue
-                    ph = ", ".join("?" * len(value))
-                except TypeError as e:
-                    raise QueryValidationError(
-                        f"フィルタ {key} はイテラブルを期待していますが、'{type(value).__name__}' を受け取りました。 "
-                        f"エラー: {e}"
-                    ) from e
-                clauses.append(f"{q} IN ({ph})")
-                if model_meta and field_name in model_meta.hints:
-                    values.extend(serialize_value(v, model_meta.hints[field_name]) for v in value)
-                else:
-                    values.extend(value)
-            elif op == "is_null":
-                clauses.append(f"{q} IS {'NULL' if value else 'NOT NULL'}")
-            else:
-                raise ValueError(f"不明なフィルタ演算子: __{op}")
-        elif value is None:
-            clauses.append(f'"{key}" IS NULL')
-        else:
-            clauses.append(f'"{key}" = ?')
-            values.append(serialized_value)
-
-    return "WHERE " + " AND ".join(clauses), values
-
-
-def _order_sql(order_by: Optional[str], desc: bool) -> str:
-    """ORDER BY句を構築します。"""
-    if not order_by:
-        return ""
-    return f' ORDER BY "{order_by}" {"DESC" if desc else "ASC"}'
-
-
-def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[int]]:
-    """LIMITおよびOFFSET句を構築します。"""
-    sql = ""
-    values: list[int] = []
-    if limit is not None:
-        if isinstance(limit, bool) or not isinstance(limit, Integral):
-            raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
-        limit_value = int(limit)
-        if limit_value < 0:
-            raise QueryValidationError(f"limit は0以上の整数である必要があります: {limit!r}")
-        sql += " LIMIT ?"
-        values.append(limit_value)
-    if offset is not None:
-        if isinstance(offset, bool) or not isinstance(offset, Integral):
-            raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
-        offset_value = int(offset)
-        if offset_value < 0:
-            raise QueryValidationError(f"offset は0以上の整数である必要があります: {offset!r}")
-        if limit is None:
-            sql += " LIMIT -1"
-        sql += " OFFSET ?"
-        values.append(offset_value)
-    return sql, values
-
-
-# ── internal model metadata ───────────────────────────────────────────── #
+# ── internal model metadata ──────────────────────────────────────────────── #
 
 class _Meta:
     """モデルの内部メタデータ。"""
-    __slots__ = ("table", "pk", "hints", "decoders", "needs_row_validation", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "filter_bases", "decoders", "needs_row_validation", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -260,6 +53,8 @@ class _Meta:
         self.table      = table
         self.pk         = pk
         self.hints      = hints
+        self.filter_bases = {name: unwrap_annotated(resolve_type(annotation)[0])
+                             for name, annotation in hints.items()}
         self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
                            for name, annotation in hints.items()}
         self.needs_row_validation = needs_row_validation(model)
@@ -342,16 +137,15 @@ class NyanSQLite:
         hints  = model_hints(model)
 
         # 異なるモデルとのテーブル名衝突をチェック
-        for existing_model, meta in self._registry.items():
-            if meta.table == table and existing_model is not model:
-                raise TableNameCollisionError(
-                    f"テーブル名衝突を検出: "
-                    f"{existing_model.__name__} → '{table}' と {model.__name__} → '{table}'。 "
-                    f"これはCamelCaseのバリアント (例: 'UserAuth' と 'User_Auth') で発生する可能性があります。 "
-                    f"明示的な __tablename__ のオーバーライドを使用するか、いずれかのモデルの名前を変更してください。"
-                )
-
         with self._lock:
+            for existing_model, meta in self._registry.items():
+                if meta.table == table and existing_model is not model:
+                    raise TableNameCollisionError(
+                        f"テーブル名衝突を検出: "
+                        f"{existing_model.__name__} → '{table}' と {model.__name__} → '{table}'。 "
+                        f"これはCamelCaseのバリアント (例: 'UserAuth' と 'User_Auth') で発生する可能性があります。 "
+                        f"明示的な __tablename__ のオーバーライドを使用するか、いずれかのモデルの名前を変更してください。"
+                    )
             with self._conn.transaction():
                 self._conn.execute(model_to_ddl(model))
                 check_table_schema(model, self._conn.execute(f'PRAGMA table_info("{table}")'))
@@ -366,6 +160,7 @@ class NyanSQLite:
                 )
                 for idx_sql in model_to_indexes(model):
                     self._conn.execute(idx_sql)
+                check_index_schema(model, self._conn)
 
                 fts_create, fts_triggers = model_to_fts5(model)
                 fts_table:  str | None = None
@@ -400,14 +195,7 @@ class NyanSQLite:
 
     def _to_row(self, obj: BaseModel, meta: _Meta) -> dict[str, Any]:
         """Pydanticモデル → SQLite用のシリアライズされた辞書。"""
-        # Pydantic v2 if available
-        if hasattr(obj, "model_dump"):
-            dump = obj.model_dump()
-        else:
-            dump = obj.dict()
-
-        hints = meta.hints
-        return {k: serialize_value(v, hints[k]) for k, v in dump.items() if k in hints}
+        return dict(zip(meta.hints, instance_values(obj, meta.hints)))
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
         """SQLiteの行辞書 → Pydanticモデル。
@@ -428,7 +216,7 @@ class NyanSQLite:
             decoder = meta.decoders.get(k)
             if decoder is not None:
                 data[k] = decoder(v)
-        return model(**data)
+        return validate_model(model, data)
 
     # ── INSERT ───────────────────────────────────────────────────────── #
 
@@ -480,11 +268,10 @@ class NyanSQLite:
         fields = list(hints.keys())
 
         # Pydantic v2 の高速な属性アクセスを利用
-        # model_dump() を介さず、serialize_value もインライン化に近い形で呼び出す
+        # 検証と値の変換は単体挿入と共通化し、基本型では軽量な経路を使う
         rows = []
-        for o in objs:
-            row_tuple = tuple(serialize_value(getattr(o, f), hints[f]) for f in fields)
-            rows.append(row_tuple)
+        for obj in objs:
+            rows.append(instance_values(obj, hints))
 
         cols_count = len(fields)
         params_limit = 32000  # 控えめな制限
@@ -533,9 +320,10 @@ class NyanSQLite:
 
         set_parts: list[str] = []
         set_vals:  list[Any] = []
-        for fname, value in fields.items():
-            set_parts.append(f'"{fname}" = ?')
-            set_vals.append(serialize_value(value, meta.hints[fname]))
+        if not needs_rows:
+            for fname, value in fields.items():
+                set_parts.append(f'"{fname}" = ?')
+                set_vals.append(serialize_value(value, meta.hints[fname]))
 
         where_clause, where_vals = _build_where((), where, model_meta=meta)
         sql = f'UPDATE "{meta.table}" SET {", ".join(set_parts)} {where_clause}'  # nosec B608
@@ -543,14 +331,7 @@ class NyanSQLite:
         with self._lock:
             with self._conn.transaction():
                 if needs_rows:
-                    rows = self._conn.execute(f'SELECT * FROM "{meta.table}" {where_clause}', tuple(where_vals))
-                    for row in rows:
-                        candidate = {
-                            name: meta.decoders[name](value)
-                            for name, value in row.items() if name in meta.hints
-                        }
-                        candidate.update(fields)
-                        model.model_validate(candidate)
+                    return update_validated_rows(model, meta, self._conn, where_clause, where_vals, fields)
                 self._conn.execute(sql, tuple(set_vals + where_vals))
             return self._conn.changes()
 
@@ -573,7 +354,7 @@ class NyanSQLite:
             >>> db.delete(Session, user_id=1, active=True)
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(kwargs.pop("where", None), kwargs), model_meta=meta)
         sql = f'DELETE FROM "{meta.table}" {where_clause}'  # nosec B608
         with self._lock:
             with self._conn.transaction():
@@ -598,7 +379,7 @@ class NyanSQLite:
             >>> user = db.get(User, "age > 30", name="Alice")
             >>> user = db.get(User, email="taro@example.com")
         """
-        results = self.query(model, *filters, limit=1, **kwargs)
+        results = self.query(model, *filters, limit=1, where=merge_where(kwargs.pop("where", None), kwargs))
         return results[0] if results else None
 
     def query(
@@ -609,6 +390,7 @@ class NyanSQLite:
         offset:   Optional[int] = None,
         order_by: Optional[str] = None,
         desc:     bool = False,
+        where:    Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> list[M]:
         """フィルタリング、ソート、ページネーションを使用して行を検索します。
@@ -621,6 +403,7 @@ class NyanSQLite:
             limit (Optional[int]): 取得する最大行数。
             offset (Optional[int]): 取得を開始するオフセット行数。
             order_by (Optional[str]): ソートに使用するフィールド名。
+            where (dict): 条件辞書。予約引数と同名のフィールドにも使用できます。
             desc (bool): 降順でソートするかどうか。デフォルトは False（昇順）。
             **kwargs (Any): キーワード形式のフィルタ条件。
 
@@ -636,7 +419,7 @@ class NyanSQLite:
             >>> db.query(User, order_by="id", limit=20, offset=40)  # ページネーション
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(where, kwargs), model_meta=meta)
 
         if order_by:
             meta.check_fields([order_by], model.__name__)
@@ -662,6 +445,7 @@ class NyanSQLite:
         offset:   Optional[int] = None,
         order_by: Optional[str] = None,
         desc:     bool = False,
+        where:    Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """特定のフィールドのみを辞書のリストとして取得します（部分読み込み）。
@@ -675,6 +459,7 @@ class NyanSQLite:
             limit (Optional[int]): 取得する最大行数。
             offset (Optional[int]): オフセット。
             order_by (Optional[str]): ソートに使用するフィールド名。
+            where (dict): 条件辞書。予約引数と同名のフィールドにも使用できます。
             desc (bool): 降順にするかどうか。
             **kwargs (Any): キーワード形式のフィルタ条件。
 
@@ -686,12 +471,14 @@ class NyanSQLite:
             >>> db.select(Article, ["title"], "views > 100")
         """
         meta = self._meta(model)
+        if not fields:
+            raise QueryValidationError("select() requires at least one field")
         meta.check_fields(fields, model.__name__)
         if order_by:
             meta.check_fields([order_by], model.__name__)
 
         col_sql      = ", ".join(f'"{f}"' for f in fields)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(where, kwargs), model_meta=meta)
         page_sql, page_values = _limit_sql(limit, offset)
         sql = (
             f'SELECT {col_sql} FROM "{meta.table}" {where_clause}'  # nosec B608
@@ -776,7 +563,7 @@ class NyanSQLite:
             >>> adults = db.count(User, age__gte=18)
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(kwargs.pop("where", None), kwargs), model_meta=meta)
         sql  = f'SELECT COUNT(*) AS n FROM "{meta.table}" {where_clause}'  # nosec B608
         with self._lock:
             rows = self._conn.execute(sql, tuple(values))
@@ -798,7 +585,7 @@ class NyanSQLite:
             >>>     ...
         """
         meta = self._meta(model)
-        where_clause, values = _build_where(filters, kwargs, model_meta=meta)
+        where_clause, values = _build_where(filters, merge_where(kwargs.pop("where", None), kwargs), model_meta=meta)
         sql  = f'SELECT 1 FROM "{meta.table}" {where_clause} LIMIT 1'  # nosec B608
         with self._lock:
             rows = self._conn.execute(sql, tuple(values))

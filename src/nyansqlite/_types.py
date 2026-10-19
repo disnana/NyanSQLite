@@ -3,8 +3,12 @@ from __future__ import annotations
 import json
 import sys
 from datetime import date, datetime
+from enum import Enum
 from functools import lru_cache
 from typing import Any, Callable, Union, get_args, get_origin
+
+from pydantic import BaseModel
+from pydantic_core import to_jsonable_python
 
 try:
     from typing import Annotated  # 3.9+
@@ -126,10 +130,19 @@ def python_type_to_sqlite(annotation: Any) -> str:
 
 # ── value serialization ────────────────────────────────────────────────── #
 
+def _json_default(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        from ._model import validation_data
+        return validation_data(value)
+    return to_jsonable_python(value)
+
+
 def serialize_value(value: Any, annotation: Any) -> Any:
     """Convert a Python value to a SQLite-storable scalar."""
     if value is None:
         return None
+    if isinstance(value, Enum):
+        return serialize_value(value.value, annotation)
 
     # 頻出する基本型を型チェックで先に処理し、resolve_type を回避する
     if isinstance(value, str):
@@ -147,13 +160,15 @@ def serialize_value(value: Any, annotation: Any) -> Any:
     base, _ = resolve_type(annotation)
     origin = get_origin(base)
 
-    if isinstance(value, (dict, list)) or origin in (dict, list):
-        return json.dumps(value, ensure_ascii=False, default=str)
+    if isinstance(value, (dict, list, tuple, set, frozenset, BaseModel)) or origin in (dict, list):
+        return json.dumps(value, ensure_ascii=False, default=_json_default)
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, date):
         return value.isoformat()
-    return value
+    if isinstance(value, bytes):
+        return value
+    return to_jsonable_python(value)
 
 
 def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
@@ -186,7 +201,8 @@ def deserialize_value(value: Any, annotation: Any, strict: bool = False) -> Any:
 
     if base is bool:
         return bool(value)
-    if origin in (dict, list) or base in (dict, list):
+    if (origin in (dict, list, tuple, set, frozenset) or base in (dict, list, tuple, set, frozenset)
+            or isinstance(base, type) and issubclass(base, BaseModel)):
         if isinstance(value, str):
             try:
                 return json.loads(value)

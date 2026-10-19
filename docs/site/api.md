@@ -264,7 +264,7 @@ Optional[M]: 取得されたモデルインスタンス、または None。
 ### `query`
 
 ```python
-def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[M]
+def query(model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[M]
 ```
 
 フィルタリング、ソート、ページネーションを使用して行を検索します。
@@ -308,7 +308,7 @@ list[M]: 取得されたモデルインスタンスのリスト。
 ### `select`
 
 ```python
-def select(model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[dict[str, Any]]
+def select(model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[dict[str, Any]]
 ```
 
 特定のフィールドのみを辞書のリストとして取得します（部分読み込み）。
@@ -521,3 +521,13 @@ list[dict[str, Any]]: 結果行のリスト（各行は辞書）。
 
 ---
 
+
+
+## 条件辞書 `where`
+
+予約引数と同名の列にも使える条件辞書。キーワード条件と併用できます。
+
+```python
+db.query(Job, where={"limit": 10}, limit=20)
+db.select(Job, ["id"], where={"limit": 10})
+```

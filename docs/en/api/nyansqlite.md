@@ -39,7 +39,7 @@ Inserts multiple model instances in bulk. Automatically uses a transaction for h
 
 ### `query`
 ```python
-def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, **kwargs: Any) -> list[M]
+def query(self, model: type[M], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[M]
 ```
 Searches for data using Django-like filtering and returns a list of model instances.
 
@@ -57,7 +57,7 @@ Retrieves the first record matching the criteria. Returns `None` if not found.
 
 ### `update`
 ```python
-def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> None
+def update(self, model: type[BaseModel], where: dict[str, Any], **fields: Any) -> int
 ```
 Updates records matching the `where` criteria with the specified `fields`.
 
@@ -91,7 +91,7 @@ Checks if any record matches the criteria.
 
 ### `select`
 ```python
-def select(self, model: type[BaseModel], fields: list[str], *filters: str, **kwargs: Any) -> list[dict[str, Any]]
+def select(self, model: type[BaseModel], fields: list[str], *filters: str, limit: Optional[int] = None, offset: Optional[int] = None, order_by: Optional[str] = None, desc: bool = False, where: Optional[dict[str, Any]] = None, **kwargs: Any) -> list[dict[str, Any]]
 ```
 Retrieves only specific fields and returns them as a list of dictionaries.
 
@@ -128,3 +128,13 @@ Returns the underlying `NyanConnection` object. Can be used for direct transacti
 def registered_models(self) -> list[type[BaseModel]]
 ```
 Returns a list of currently registered models.
+
+
+## The `where` filter dict
+
+Filter dict, including fields named like reserved arguments; combined with keyword filters.
+
+```python
+db.query(Job, where={"limit": 10}, limit=20)
+db.select(Job, ["id"], where={"limit": 10})
+```

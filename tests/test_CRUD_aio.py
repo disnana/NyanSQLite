@@ -478,3 +478,36 @@ async def test_cancelled_begin_does_not_leave_transaction_open(db, monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert not db._conn.in_transaction()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_nested_begin_preserves_outer_scope(db, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+    original_raw = db._conn._raw
+
+    def slow_savepoint(sql, params=()):
+        if sql.startswith("SAVEPOINT "):
+            started.set()
+            assert release.wait(2)
+        return original_raw(sql, params)
+
+    monkeypatch.setattr(db._conn, "_raw", slow_savepoint)
+
+    async def transaction():
+        async with db.atomic():
+            await db.insert(User(id=910, name="outer", age=1))
+            try:
+                async with db.atomic():
+                    await db.insert(User(id=911, name="inner", age=1))
+            except asyncio.CancelledError:
+                pass
+            await db.insert(User(id=912, name="continued", age=1))
+
+    task = asyncio.create_task(transaction())
+    assert await asyncio.to_thread(started.wait, 1)
+    task.cancel()
+    release.set()
+    await asyncio.wait_for(task, 2)
+    assert not db._conn.in_transaction()
+    assert [row.id for row in await db.query(User, order_by="id")] == [910, 912]

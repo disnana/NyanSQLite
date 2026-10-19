@@ -91,3 +91,30 @@ db = NyanSQLite("app.db", strict_deserialization=True)
 
 - [NyanSQLite API Reference](../api)
 - [Pydantic Documentation](https://docs.pydantic.dev/)
+
+## Consistent persistence and filtering
+
+`insert()` and `insert_many()` validate values before saving, including assignments made after model construction. Invalid values prevent writes. Plain scalar types use lightweight checks; models with constraints or custom validators use Pydantic validation. The original instance is not mutated.
+
+`update()` persists normalized validator results, including related fields changed by model validators. A validation or uniqueness failure rolls back the entire update, including updates that affect multiple rows.
+
+Input aliases (`Field(alias=...)`, `AliasChoices`, and `AliasPath`) work when restoring records. Columns and filters use model field names. `ClassVar` and private attributes are not persisted.
+
+`Field(exclude=True)` controls Pydantic output, not database persistence. Both single and bulk inserts persist every model field. Remove a field from the persistence model if it must not be stored.
+
+Invalid filter types raise `QueryValidationError`. `__is_null` accepts only bool. `field=None` and `field__eq=None` select NULL; `field__ne=None` selects non-NULL. Values that Pydantic can convert, such as numeric strings, are converted to the column's type. Storage range constraints do not restrict search bounds: `age__gt=-1` is valid for a nonnegative field.
+
+## Filtering fields named like API arguments
+
+Use a `where` dict for fields named `limit`, `offset`, `order_by`, `desc`, or `where`. The same dict is supported by `get()`, `count()`, `exists()`, and `delete()`. Duplicate conditions in the dict and keyword arguments raise an error.
+
+```python
+rows = db.query(Job, where={"limit": 10, "where": "ready"}, limit=20)
+row = db.get(Job, where={"limit": 10})
+```
+
+`select(Model, [])` raises `QueryValidationError`; specify at least one field.
+
+`register()` raises `SchemaMismatchError` if an existing index differs from the model, including changing a regular index to `UniqueIndexed`. Back up and migrate explicitly. Set `__tablename__` on the model to choose a table name.
+
+Older JSON records containing ordinary Enum representations such as `"Role.ADMIN"` are not rewritten automatically. Explicitly migrate them to Enum values such as `"admin"`.
