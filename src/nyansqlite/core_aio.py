@@ -11,6 +11,7 @@ from typing import Any, Optional, TypeVar
 from pydantic import BaseModel
 
 from ._connection import NyanConnection
+from ._insert import can_bind_fields_directly, insert_dumped_rows, insert_statement, model_insert_row
 from ._row_validation import direct_row_validator
 from ._schema import (
     check_fts_schema,
@@ -261,7 +262,7 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[i
 # ── internal model metadata ───────────────────────────────────────────── #
 
 class _Meta:
-    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_sql", "needs_row_validation", "row_validator", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_fields", "insert_sql", "needs_row_validation", "row_validator", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -279,9 +280,8 @@ class _Meta:
         self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
                            for name, annotation in hints.items()}
         self.encoders = {name: compile_serializer(annotation) for name, annotation in hints.items()}
-        cols = ", ".join(f'"{name}"' for name in hints)
-        ph = ", ".join("?" for _ in hints)
-        self.insert_sql = f'INSERT INTO "{table}" ({cols}) VALUES ({ph})'
+        self.insert_fields = tuple(hints)
+        self.insert_sql = insert_statement(table, self.insert_fields)
         self.needs_row_validation = needs_row_validation(model)
         self.row_validator = direct_row_validator(model)
         self.fts_table  = fts_table
@@ -331,6 +331,7 @@ class NyanSQLiteAIO:
         self._conn_lock = asyncio.Lock()   # SQLite接続への実アクセスを短く保護
         self._write_lock = asyncio.Lock()  # 書き込みとトランザクション境界を保護
         self._lock_owner = None            # ロックを保持しているタスク
+        self._transaction_registry: Optional[dict[type[BaseModel], _Meta]] = None
         self._strict_deserialization = strict_deserialization
 
     @asynccontextmanager
@@ -411,17 +412,6 @@ class NyanSQLiteAIO:
         pk     = get_primary_key(model)
         hints  = model_hints(model)
 
-        # Check for table name collisions with different models
-        for existing_model, meta in self._registry.items():
-            if meta.table == table and existing_model is not model:
-                raise TableNameCollisionError(
-                    f"Table name collision detected: "
-                    f"{existing_model.__name__} → '{table}' but also "
-                    f"{model.__name__} → '{table}'. "
-                    f"This can happen with CamelCase variants (e.g., 'UserAuth' and 'User_Auth'). "
-                    f"Use explicit __tablename__ override or rename one of the models."
-                )
-
         fts_create, fts_triggers = model_to_fts5(model)
         fts_table:  str | None = None
         fts_fields: list[str]  = []
@@ -431,6 +421,18 @@ class NyanSQLiteAIO:
             fts_fields = [f for f, ann in hints.items() if is_searchable(ann)]
 
         async with self._write_context():
+            registry = self._current_registry()
+            # Check for table name collisions with different models
+            for existing_model, meta in registry.items():
+                if meta.table == table and existing_model is not model:
+                    raise TableNameCollisionError(
+                        f"Table name collision detected: "
+                        f"{existing_model.__name__} → '{table}' but also "
+                        f"{model.__name__} → '{table}'. "
+                        f"This can happen with CamelCase variants (e.g., 'UserAuth' and 'User_Auth'). "
+                        f"Use explicit __tablename__ override or rename one of the models."
+                    )
+
             def _register_all() -> None:
                 with self._conn.transaction():
                     self._conn.execute(model_to_ddl(model))
@@ -455,14 +457,20 @@ class NyanSQLiteAIO:
 
             await self._run_db_call(_register_all)
 
-        self._registry[model] = _Meta(
-            table=table, pk=pk, hints=hints, model=model,
-            strict_deserialization=self._strict_deserialization,
-            fts_table=fts_table, fts_fields=fts_fields,
-        )
+            registry[model] = _Meta(
+                table=table, pk=pk, hints=hints, model=model,
+                strict_deserialization=self._strict_deserialization,
+                fts_table=fts_table, fts_fields=fts_fields,
+            )
+
+
+    def _current_registry(self) -> dict[type[BaseModel], _Meta]:
+        if self._transaction_registry is not None and self._lock_owner is asyncio.current_task():
+            return self._transaction_registry
+        return self._registry
 
     def _meta(self, model: type[BaseModel]) -> _Meta:
-        meta = self._registry.get(model)
+        meta = self._current_registry().get(model)
         if meta is None:
             raise ModelNotRegisteredError(
                 f"{model.__name__} is not registered. "
@@ -471,16 +479,6 @@ class NyanSQLiteAIO:
         return meta
 
     # ── helpers ───────────────────────────────────────────────────────── #
-
-    def _to_row(self, obj: BaseModel, meta: _Meta) -> dict[str, Any]:
-        """Pydantic model → serialised dict for SQLite."""
-        if hasattr(obj, "model_dump"):
-            dump = obj.model_dump()
-        else:
-            dump = obj.dict()
-
-        hints = meta.hints
-        return {k: serialize_value(v, hints[k]) for k, v in dump.items() if k in hints}
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
         """SQLite row dict → Pydantic model.
@@ -531,15 +529,11 @@ class NyanSQLiteAIO:
                                      Raised if the model is not registered.
         """
         meta = self._meta(type(obj))
-        row  = self._to_row(obj, meta)
-        cols = ", ".join(f'"{k}"' for k in row)
-        ph   = ", ".join("?" * len(row))
-        sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'  # nosec B608
-
+        row = model_insert_row(obj, meta.encoders)
+        fields = tuple(row)
+        sql = meta.insert_sql if fields == meta.insert_fields else insert_statement(meta.table, fields)
         async with self._write_context():
-            await self._run_db_call(
-                lambda: self._conn.execute(sql, tuple(row.values()))
-            )
+            await self._run_db_call(lambda: self._conn.execute_write(sql, tuple(row.values())))
         return obj
 
     async def insert_many(self, objs: list[M]) -> int:
@@ -564,19 +558,22 @@ class NyanSQLiteAIO:
         if any(type(o) is not model_type for o in objs):
             raise TypeError("insert_many() only accepts instances of the same model type.")
         meta = self._meta(model_type)
-        fields = list(meta.hints)
+        fields = meta.insert_fields
+        encoders = tuple(meta.encoders[field] for field in fields)
 
-        encoders = tuple(meta.encoders[f] for f in fields)
         def rows():
             for obj in objs:
                 yield tuple(encode(getattr(obj, field)) for field, encode in zip(fields, encoders))
 
-        async with self._write_context():
-            def _bulk_insert_all():
-                with self._conn.transaction():
+        def bulk_insert():
+            with self._conn.transaction():
+                if can_bind_fields_directly(model_type, meta.hints):
                     self._conn.executemany(meta.insert_sql, rows())
+                else:
+                    insert_dumped_rows(self._conn, meta.table, meta.encoders, objs)
 
-            await self._run_db_call(_bulk_insert_all)
+        async with self._write_context():
+            await self._run_db_call(bulk_insert)
         return len(objs)
 
     # ── UPDATE ───────────────────────────────────────────────────────── #
@@ -946,21 +943,39 @@ class NyanSQLiteAIO:
             >>>     # Raise error to rollback
         """
         async with self._write_context():
-            # Implementation: Start transaction, yield, then commit/rollback
-            in_tx_already = await self._run_db_call(self._conn.in_transaction)
+            if await self._run_db_call(self._conn.in_transaction):
+                yield
+                return
+
+            registry = self._registry.copy()
+            self._transaction_registry = registry
+            committed = False
+
+            def commit() -> None:
+                nonlocal committed
+                self._conn._raw("COMMIT")
+                committed = True
 
             try:
-                if not in_tx_already:
-                    await self._run_db_call(lambda: self._conn._raw("BEGIN"))
+                await self._run_db_call(lambda: self._conn._raw("BEGIN"))
                 yield
-                if not in_tx_already:
-                    await self._run_db_call(lambda: self._conn._raw("COMMIT"))
-            except BaseException:
-                # A cancelled thread may have completed BEGIN or COMMIT before
-                # cancellation is delivered back to this coroutine.
-                if not in_tx_already and await self._run_db_call(self._conn.in_transaction):
-                    await self._run_db_call(lambda: self._conn._raw("ROLLBACK"))
+                await self._run_db_call(commit)
+            except BaseException as error:
+                # _run_db_call drains the worker before propagating cancellation.
+                # Check and roll back in that same worker call so a second
+                # cancellation cannot interrupt cleanup between the statements.
+                if not committed:
+                    try:
+                        await self._run_db_call(self._conn.rollback_if_open)
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as rollback_error:
+                        raise error from rollback_error
                 raise
+            finally:
+                if committed:
+                    self._registry = registry
+                self._transaction_registry = None
 
     # ── context manager + info ────────────────────────────────────────── #
 
@@ -992,7 +1007,7 @@ class NyanSQLiteAIO:
             list[str]: モデル名のリスト。
                        List of model names.
         """
-        return [m.__name__ for m in self._registry]
+        return [m.__name__ for m in self._current_registry()]
 
     def _execute_and_return_changes(self, sql: str, params: tuple[Any, ...]) -> int:
         self._conn.execute(sql, params)
