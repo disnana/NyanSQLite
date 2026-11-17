@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## [1.1.7] - 2026-11-17
+
+### 🚀 Performance
+- Reused INSERT statements and field encoders for single-row inserts. Sync inserts use SQLite's implicit transaction unless a transaction is already open.
+- In five local Python 3.12 benchmark sets, the median time reduction for 10,000 sync inserts into a WAL database was 30.4% on APSW and 24.2% on sqlite3.
+
+### 🐞 Fixed
+- Finished async transaction rollback under repeated cancellation and kept committed registrations when cancellation arrived during a successful commit.
+- Updated model registration only when the containing transaction commits and rejected concurrent table-name collisions.
+- Preserved the original exception when SQLite had already rolled back the transaction.
+- Applied Pydantic serializers and field exclusions consistently to single and bulk inserts.
+
+### 🧪 Tests and CI
+- Added transaction, registration, and bulk serialization regression tests.
+- Ran Python 3.9 CI on Ubuntu 24.04, which provides supported Python 3.9 builds.
+
+---
+
 ## [1.1.6] - 2026-09-27
 
 ### 🚀 Performance
@@ -121,6 +139,24 @@
 ---
 
 # 更新履歴
+
+## [1.1.7] - 2026-11-17
+
+### 🚀 高速化
+- 単件挿入で INSERT 文とフィールド変換器を再利用します。同期版は既存トランザクションがない場合に SQLite の暗黙トランザクションを利用します。
+- Python 3.12 のローカル測定5セットで、WAL データベースへの同期単件挿入1万件の所要時間は、短縮率の中央値で APSW が30.4%、sqlite3 が24.2%改善しました。
+
+### 🐞 修正
+- 非同期トランザクションの後処理中に再キャンセルされてもロールバックを完了し、コミットが成功した場合は登録情報を保持するようにしました。
+- トランザクションのコミット結果とモデル登録情報を一致させ、同時登録時のテーブル名衝突を検出するようにしました。
+- SQLite が自動ロールバックした場合に元の例外を保持するようにしました。
+- 単件・一括挿入で Pydantic のシリアライザーとフィールド除外を統一しました。
+
+### 🧪 テストと CI
+- トランザクション、モデル登録、一括挿入の回帰テストを追加しました。
+- Python 3.9 の CI ジョブを対応する Ubuntu 24.04 で実行します。
+
+---
 
 ## [1.1.6] - 2026-09-27
 

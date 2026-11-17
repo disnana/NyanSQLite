@@ -10,6 +10,7 @@ from typing import Any, Optional, TypeVar
 from pydantic import BaseModel
 
 from ._connection import NyanConnection
+from ._insert import can_bind_fields_directly, insert_dumped_rows, insert_statement, model_insert_row
 from ._row_validation import direct_row_validator
 from ._schema import (
     check_fts_schema,
@@ -268,7 +269,7 @@ def _limit_sql(limit: Optional[int], offset: Optional[int]) -> tuple[str, list[i
 
 class _Meta:
     """モデルの内部メタデータ。"""
-    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_sql", "needs_row_validation", "row_validator", "fts_table", "fts_fields")
+    __slots__ = ("table", "pk", "hints", "decoders", "encoders", "insert_fields", "insert_sql", "needs_row_validation", "row_validator", "fts_table", "fts_fields")
 
     def __init__(
         self,
@@ -286,9 +287,8 @@ class _Meta:
         self.decoders   = {name: compile_deserializer(annotation, strict_deserialization)
                            for name, annotation in hints.items()}
         self.encoders = {name: compile_serializer(annotation) for name, annotation in hints.items()}
-        cols = ", ".join(f'"{name}"' for name in hints)
-        ph = ", ".join("?" for _ in hints)
-        self.insert_sql = f'INSERT INTO "{table}" ({cols}) VALUES ({ph})'
+        self.insert_fields = tuple(hints)
+        self.insert_sql = insert_statement(table, self.insert_fields)
         self.needs_row_validation = needs_row_validation(model)
         self.row_validator = direct_row_validator(model)
         self.fts_table  = fts_table
@@ -360,6 +360,7 @@ class NyanSQLite:
         self._conn     = NyanConnection(path, wal=wal, statement_cache_size=statement_cache_size)
         self._registry: dict[type[BaseModel], _Meta] = {}
         self._lock     = threading.RLock()
+        self._transaction_state = threading.local()
         self._strict_deserialization = strict_deserialization
 
     # ── registration ─────────────────────────────────────────────────── #
@@ -377,17 +378,18 @@ class NyanSQLite:
         pk     = get_primary_key(model)
         hints  = model_hints(model)
 
-        # 異なるモデルとのテーブル名衝突をチェック
-        for existing_model, meta in self._registry.items():
-            if meta.table == table and existing_model is not model:
-                raise TableNameCollisionError(
-                    f"テーブル名衝突を検出: "
-                    f"{existing_model.__name__} → '{table}' と {model.__name__} → '{table}'。 "
-                    f"これはCamelCaseのバリアント (例: 'UserAuth' と 'User_Auth') で発生する可能性があります。 "
-                    f"明示的な __tablename__ のオーバーライドを使用するか、いずれかのモデルの名前を変更してください。"
-                )
-
         with self._lock:
+            registry = self._current_registry()
+            # 異なるモデルとのテーブル名衝突をチェック
+            for existing_model, meta in registry.items():
+                if meta.table == table and existing_model is not model:
+                    raise TableNameCollisionError(
+                        f"テーブル名衝突を検出: "
+                        f"{existing_model.__name__} → '{table}' と {model.__name__} → '{table}'。 "
+                        f"これはCamelCaseのバリアント (例: 'UserAuth' と 'User_Auth') で発生する可能性があります。 "
+                        f"明示的な __tablename__ のオーバーライドを使用するか、いずれかのモデルの名前を変更してください。"
+                    )
+
             with self._conn.transaction():
                 self._conn.execute(model_to_ddl(model))
                 check_table_schema(model, self._conn.execute(f'PRAGMA table_info("{table}")'))
@@ -416,15 +418,18 @@ class NyanSQLite:
                     fts_table  = f"{table}_fts"
                     fts_fields = [f for f, ann in hints.items() if is_searchable(ann)]
 
-            self._registry[model] = _Meta(
+            registry[model] = _Meta(
                 table=table, pk=pk, hints=hints, model=model,
                 strict_deserialization=self._strict_deserialization,
                 fts_table=fts_table, fts_fields=fts_fields,
             )
 
+    def _current_registry(self) -> dict[type[BaseModel], _Meta]:
+        return getattr(self._transaction_state, "registry", self._registry)
+
     def _meta(self, model: type[BaseModel]) -> _Meta:
         """モデルのメタデータを取得します。"""
-        meta = self._registry.get(model)
+        meta = self._current_registry().get(model)
         if meta is None:
             raise ModelNotRegisteredError(
                 f"{model.__name__} は登録されていません。 "
@@ -433,17 +438,6 @@ class NyanSQLite:
         return meta
 
     # ── helpers ───────────────────────────────────────────────────────── #
-
-    def _to_row(self, obj: BaseModel, meta: _Meta) -> dict[str, Any]:
-        """Pydanticモデル → SQLite用のシリアライズされた辞書。"""
-        # Pydantic v2 if available
-        if hasattr(obj, "model_dump"):
-            dump = obj.model_dump()
-        else:
-            dump = obj.dict()
-
-        hints = meta.hints
-        return {k: serialize_value(v, hints[k]) for k, v in dump.items() if k in hints}
 
     def _from_row(self, model: type[M], meta: _Meta, row: dict[str, Any]) -> M:
         """SQLiteの行辞書 → Pydanticモデル。
@@ -491,13 +485,11 @@ class NyanSQLite:
             ModelNotRegisteredError: モデルが登録されていない場合に発生します。
         """
         meta = self._meta(type(obj))
-        row  = self._to_row(obj, meta)
-        cols = ", ".join(f'"{k}"' for k in row)
-        ph   = ", ".join("?" * len(row))
-        sql  = f'INSERT INTO "{meta.table}" ({cols}) VALUES ({ph})'  # nosec B608
+        row = model_insert_row(obj, meta.encoders)
+        fields = tuple(row)
+        sql = meta.insert_sql if fields == meta.insert_fields else insert_statement(meta.table, fields)
         with self._lock:
-            with self._conn.transaction():
-                self._conn.execute(sql, tuple(row.values()))
+            self._conn.execute_write(sql, tuple(row.values()))
         return obj
 
     def insert_many(self, objs: list[M]) -> int:
@@ -520,18 +512,18 @@ class NyanSQLite:
         if any(type(o) is not model_type for o in objs):
             raise TypeError("insert_many() には同じモデル型のインスタンスだけを渡してください。")
         meta = self._meta(model_type)
-        fields = list(meta.hints)
+        fields = meta.insert_fields
+        encoders = tuple(meta.encoders[field] for field in fields)
 
-        # One INSERT statement is reused per row; SQLite's variable limit
-        # applies to that statement, not to the entire iterable.
-        encoders = tuple(meta.encoders[f] for f in fields)
         def rows():
             for obj in objs:
                 yield tuple(encode(getattr(obj, field)) for field, encode in zip(fields, encoders))
 
-        with self._lock:
-            with self._conn.transaction():
+        with self._lock, self._conn.transaction():
+            if can_bind_fields_directly(model_type, meta.hints):
                 self._conn.executemany(meta.insert_sql, rows())
+            else:
+                insert_dumped_rows(self._conn, meta.table, meta.encoders, objs)
 
         return len(objs)
 
@@ -885,8 +877,19 @@ class NyanSQLite:
             >>>     # ここで例外が発生するとロールバックされます
         """
         with self._lock:
-            with self._conn.transaction():
+            if self._conn.in_transaction():
                 yield
+                return
+
+            # Registrations made inside this transaction become visible to
+            # other threads only after the schema commits.
+            self._transaction_state.registry = self._registry.copy()
+            try:
+                with self._conn.transaction():
+                    yield
+                self._registry = self._transaction_state.registry
+            finally:
+                del self._transaction_state.registry
 
     # ── context manager + info ────────────────────────────────────────── #
 
@@ -914,4 +917,4 @@ class NyanSQLite:
         """
         # 読み取り操作なのでロックは不要だが、_registryへのアクセス保護のため維持
         with self._lock:
-            return [m.__name__ for m in self._registry]
+            return [m.__name__ for m in self._current_registry()]

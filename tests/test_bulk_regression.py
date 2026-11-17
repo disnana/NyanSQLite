@@ -1,9 +1,10 @@
 """Bulk writes remain atomic and serialization stays off the async loop."""
 
 import threading
+from typing import Optional
 
 import pytest
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
 
 from nyansqlite import NyanSQLite, NyanSQLiteAIO
 
@@ -62,3 +63,62 @@ async def test_async_bulk_serialization_on_worker_and_rollback():
         with pytest.raises(Exception):
             await db.insert_many([BulkRecord(id=100, data={"i": 100}), BulkRecord(id=0, data={"i": 0})])
         assert await db.get(BulkRecord, id=100) is None
+
+
+class SerializedRecord(BaseModel):
+    id: int
+    name: str
+    hidden: Optional[str] = Field(default=None, exclude=True)
+
+    @field_serializer("name")
+    def normalize_name(self, value: str) -> str:
+        return value.upper()
+
+
+def test_sync_bulk_respects_pydantic_serialization():
+    with NyanSQLite() as db:
+        db.register(SerializedRecord)
+        db.insert(SerializedRecord(id=1, name="single", hidden="omit"))
+        db.insert_many([SerializedRecord(id=2, name="bulk", hidden="omit")])
+        assert db.execute_raw("SELECT name, hidden FROM serialized_record ORDER BY id") == [
+            {"name": "SINGLE", "hidden": None},
+            {"name": "BULK", "hidden": None},
+        ]
+
+
+async def test_async_bulk_respects_pydantic_serialization():
+    async with NyanSQLiteAIO() as db:
+        await db.register(SerializedRecord)
+        await db.insert(SerializedRecord(id=1, name="single", hidden="omit"))
+        await db.insert_many([SerializedRecord(id=2, name="bulk", hidden="omit")])
+        assert await db.execute_raw("SELECT name, hidden FROM serialized_record ORDER BY id") == [
+            {"name": "SINGLE", "hidden": None},
+            {"name": "BULK", "hidden": None},
+        ]
+
+
+class VariableColumns(BaseModel):
+    id: int
+    data: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def dump_record(self, serialize):
+        record = serialize(self)
+        if self.data is None:
+            del record["data"]
+        return record
+
+
+def test_bulk_preserves_column_groups_and_rolls_back_across_groups():
+    with NyanSQLite() as db:
+        db.execute_raw("CREATE TABLE variable_columns (id INTEGER PRIMARY KEY, data TEXT DEFAULT 'default')")
+        db.register(VariableColumns)
+        db.insert_many([VariableColumns(id=1), VariableColumns(id=2, data="custom"), VariableColumns(id=3)])
+        assert db.query(VariableColumns, order_by="id") == [
+            VariableColumns(id=1, data="default"),
+            VariableColumns(id=2, data="custom"),
+            VariableColumns(id=3, data="default"),
+        ]
+        with pytest.raises(Exception, match="variable_columns.id"):
+            db.insert_many([VariableColumns(id=4), VariableColumns(id=1, data="duplicate")])
+        assert not db.exists(VariableColumns, id=4)

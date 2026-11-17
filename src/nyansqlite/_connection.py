@@ -90,6 +90,10 @@ class NyanConnection:
     def execute(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
         return self._raw(sql, params)
 
+    def execute_write(self, sql: str, params: tuple) -> None:
+        """Execute a single statement that does not return rows."""
+        self._conn.execute(sql, params)
+
     def execute_rows(self, sql: str, params: tuple = ()) -> tuple[list[str], list[tuple]]:
         """Fetch raw rows for model construction without building intermediate dicts."""
         if self._backend == "apsw":
@@ -129,9 +133,16 @@ class NyanConnection:
         try:
             yield
             self._raw("COMMIT")
-        except BaseException:
-            self._raw("ROLLBACK")
+        except BaseException as error:
+            try:
+                self.rollback_if_open()
+            except Exception as rollback_error:
+                raise error from rollback_error
             raise
+
+    def rollback_if_open(self) -> None:
+        if self.in_transaction():
+            self._raw("ROLLBACK")
 
     # ── util ─────────────────────────────────────────────────────────── #
 
