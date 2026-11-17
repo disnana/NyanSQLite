@@ -134,7 +134,8 @@ jobs:
     name: Test (py${{ matrix.python-version }}, ${{ matrix.os }})
     needs: should-run
     if: needs.should-run.outputs.run_ci == 'true'
-    runs-on: ${{ matrix.os }}
+    # setup-python has no Python 3.9 builds for Ubuntu 26.04.
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.9' && 'ubuntu-24.04' || matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
