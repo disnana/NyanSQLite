@@ -21,7 +21,7 @@ jobs:
   # ============================================
   # Should-Run Check - Determines if CI is needed
   # main push / workflow_dispatch: 常に実行
-  # PR: src/ tests/ pyproject.toml tox.ini の変更時のみ実行
+  # PR: src/ tests/ pyproject.toml tox.ini CIワークフローの変更時に実行
   # ============================================
   should-run:
     name: Check if CI needed
@@ -71,12 +71,12 @@ jobs:
         echo "Changed files:"
         echo "$CHANGED"
 
-        if echo "$CHANGED" | grep -qE '^(src|tests)/|^pyproject\.toml$|^tox\.ini$'; then
+        if echo "$CHANGED" | grep -qE '^(src|tests)/|^pyproject\.toml$|^tox\.ini$|^\.github/workflows/ci\.yml$'; then
           echo "run_ci=true" >> $GITHUB_OUTPUT
-          echo "→ src/tests changed: CI required"
+          echo "→ code, tests, or CI configuration changed: CI required"
         else
           echo "run_ci=false" >> $GITHUB_OUTPUT
-          echo "→ no src/tests changes: CI skipped"
+          echo "→ no code, test, or CI configuration changes: CI skipped"
         fi
 
   # ============================================
@@ -485,6 +485,11 @@ jobs:
         with:
           name: dist
           path: dist/
+
+      - name: Set up Python for Sigstore
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON_VERSION }}
 
       - name: Sign the artifacts with Sigstore
         uses: sigstore/gh-action-sigstore-python@v3.0.1
