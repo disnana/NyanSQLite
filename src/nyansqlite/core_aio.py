@@ -932,10 +932,10 @@ class NyanSQLiteAIO:
     @asynccontextmanager
     async def atomic(self) -> AsyncGenerator[None, None]:
         """非同期トランザクション（ATOMICブロック）を開始します。
-        ネスト（入れ子）された呼び出しも安全に処理されます。
+        入れ子のブロックは SAVEPOINT で保護されます。
 
         Async transaction (ATOMIC block).
-        Nested calls are handled safely.
+        Nested blocks use savepoints.
 
         Example:
             >>> async with db.atomic():
@@ -943,39 +943,32 @@ class NyanSQLiteAIO:
             >>>     # Raise error to rollback
         """
         async with self._write_context():
-            if await self._run_db_call(self._conn.in_transaction):
-                yield
-                return
-
-            registry = self._registry.copy()
+            parent_registry = self._transaction_registry
+            registry = self._current_registry().copy()
             self._transaction_registry = registry
-            committed = False
-
-            def commit() -> None:
-                nonlocal committed
-                self._conn._raw("COMMIT")
-                committed = True
-
+            scope = self._conn.transaction_scope()
             try:
-                await self._run_db_call(lambda: self._conn._raw("BEGIN"))
+                await self._run_db_call(scope.begin)
                 yield
-                await self._run_db_call(commit)
+                await self._run_db_call(scope.commit)
             except BaseException as error:
-                # _run_db_call drains the worker before propagating cancellation.
-                # Check and roll back in that same worker call so a second
-                # cancellation cannot interrupt cleanup between the statements.
-                if not committed:
+                # Cleanup runs in one worker call and is drained even if the
+                # task is cancelled again during rollback.
+                if scope.active:
                     try:
-                        await self._run_db_call(self._conn.rollback_if_open)
+                        await self._run_db_call(scope.rollback)
                     except asyncio.CancelledError:
                         pass
                     except Exception as rollback_error:
                         raise error from rollback_error
                 raise
             finally:
-                if committed:
-                    self._registry = registry
-                self._transaction_registry = None
+                if scope.committed:
+                    if parent_registry is None:
+                        self._registry = registry
+                    else:
+                        parent_registry.update(registry)
+                self._transaction_registry = parent_registry
 
     # ── context manager + info ────────────────────────────────────────── #
 
