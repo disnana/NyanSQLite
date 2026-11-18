@@ -176,3 +176,96 @@ async def test_cancellation_during_successful_commit_keeps_registration(monkeypa
             await task
         assert db.registered_models() == ["Record"]
         assert await db.query(Record) == [Record(id=1)]
+
+
+def test_sync_savepoints_rollback_batches_and_registrations():
+    inner_model = create_model("InnerRecord", id=(int, ...))
+    with NyanSQLite() as db:
+        db.register(Record)
+        with db.atomic():
+            db.insert(Record(id=1))
+            with pytest.raises(Exception, match="UNIQUE constraint failed"):
+                db.insert_many([Record(id=2), Record(id=1)])
+
+            with pytest.raises(ValueError, match="rollback nested scope"):
+                with db.atomic():
+                    db.register(inner_model)
+                    db.insert(inner_model(id=3))
+                    db.insert(Record(id=3))
+                    raise ValueError("rollback nested scope")
+            assert db.registered_models() == ["Record"]
+
+            with db.atomic():
+                db.register(inner_model)
+                db.insert(inner_model(id=4))
+                db.insert(Record(id=4))
+            assert db.query(inner_model) == [inner_model(id=4)]
+
+        assert db.query(Record, order_by="id") == [Record(id=1), Record(id=4)]
+        assert db.query(inner_model) == [inner_model(id=4)]
+
+
+async def test_async_savepoints_rollback_batches_and_registrations():
+    inner_model = create_model("InnerRecord", id=(int, ...))
+    async with NyanSQLiteAIO() as db:
+        await db.register(Record)
+        async with db.atomic():
+            await db.insert(Record(id=1))
+            with pytest.raises(Exception, match="UNIQUE constraint failed"):
+                await db.insert_many([Record(id=2), Record(id=1)])
+
+            with pytest.raises(ValueError, match="rollback nested scope"):
+                async with db.atomic():
+                    await db.register(inner_model)
+                    await db.insert(inner_model(id=3))
+                    await db.insert(Record(id=3))
+                    raise ValueError("rollback nested scope")
+            assert db.registered_models() == ["Record"]
+
+            async with db.atomic():
+                await db.register(inner_model)
+                await db.insert(inner_model(id=4))
+                await db.insert(Record(id=4))
+            assert await db.query(inner_model) == [inner_model(id=4)]
+
+        assert await db.query(Record, order_by="id") == [Record(id=1), Record(id=4)]
+        assert await db.query(inner_model) == [inner_model(id=4)]
+
+
+async def test_cancellation_during_savepoint_start_releases_nested_scope(monkeypatch):
+    async with NyanSQLiteAIO() as db:
+        await db.register(Record)
+        savepoint_started = asyncio.Event()
+        release_savepoint = threading.Event()
+        loop = asyncio.get_running_loop()
+        raw = db._conn._raw
+        statements = []
+
+        def pause_savepoint(sql, params=()):
+            statements.append(sql)
+            if sql.startswith("SAVEPOINT "):
+                loop.call_soon_threadsafe(savepoint_started.set)
+                assert release_savepoint.wait(5)
+            return raw(sql, params)
+
+        monkeypatch.setattr(db._conn, "_raw", pause_savepoint)
+
+        async def transaction():
+            async with db.atomic():
+                await db.insert(Record(id=1))
+                with pytest.raises(asyncio.CancelledError):
+                    async with db.atomic():
+                        pytest.fail("The cancelled block should not start")
+                await db.insert(Record(id=2))
+
+        task = asyncio.create_task(transaction())
+        try:
+            await asyncio.wait_for(savepoint_started.wait(), 3)
+            task.cancel()
+        finally:
+            release_savepoint.set()
+        await asyncio.wait_for(task, 5)
+        assert any(sql.startswith("ROLLBACK TO SAVEPOINT ") for sql in statements)
+        assert any(sql.startswith("RELEASE SAVEPOINT ") for sql in statements)
+        assert not db._conn.in_transaction()
+        assert await db.query(Record, order_by="id") == [Record(id=1), Record(id=2)]

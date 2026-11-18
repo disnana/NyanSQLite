@@ -26,6 +26,7 @@ class NyanConnection:
     _conn: Any
 
     def __init__(self, path: str, wal: bool = True, statement_cache_size: int | None = None):
+        self._savepoint_counter = 0
         if statement_cache_size is not None:
             if isinstance(statement_cache_size, bool) or not isinstance(statement_cache_size, Integral):
                 raise ValueError("statement_cache_size must be a non-negative integer")
@@ -125,20 +126,20 @@ class NyanConnection:
 
     @contextmanager
     def transaction(self) -> Generator[None, None, None]:
-        if self.in_transaction():
-            yield
-            return
-
-        self._raw("BEGIN")
+        scope = self.transaction_scope()
         try:
+            scope.begin()
             yield
-            self._raw("COMMIT")
+            scope.commit()
         except BaseException as error:
             try:
-                self.rollback_if_open()
+                scope.rollback()
             except Exception as rollback_error:
                 raise error from rollback_error
             raise
+
+    def transaction_scope(self) -> _TransactionScope:
+        return _TransactionScope(self)
 
     def rollback_if_open(self) -> None:
         if self.in_transaction():
@@ -159,3 +160,40 @@ class NyanConnection:
     @property
     def backend(self) -> str:
         return self._backend
+
+
+class _TransactionScope:
+    """A transaction or savepoint whose state is shared with the async worker."""
+
+    def __init__(self, connection: NyanConnection):
+        self.connection = connection
+        self.savepoint: str | None = None
+        self.active = False
+        self.committed = False
+
+    def begin(self) -> None:
+        if self.connection.in_transaction():
+            self.connection._savepoint_counter += 1
+            self.savepoint = f'"nyan_sp_{self.connection._savepoint_counter}"'
+            self.connection._raw(f"SAVEPOINT {self.savepoint}")
+        else:
+            self.connection._raw("BEGIN")
+        self.active = True
+
+    def commit(self) -> None:
+        if self.savepoint is None:
+            self.connection._raw("COMMIT")
+        else:
+            self.connection._raw(f"RELEASE SAVEPOINT {self.savepoint}")
+        self.active = False
+        self.committed = True
+
+    def rollback(self) -> None:
+        if not self.active:
+            return
+        if self.savepoint is None:
+            self.connection.rollback_if_open()
+        elif self.connection.in_transaction():
+            self.connection._raw(f"ROLLBACK TO SAVEPOINT {self.savepoint}")
+            self.connection._raw(f"RELEASE SAVEPOINT {self.savepoint}")
+        self.active = False

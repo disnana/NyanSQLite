@@ -47,7 +47,7 @@ async with db.atomic():
 
 ### Nested Transactions
 
-`atomic()` can be nested. The transaction is committed only when the outermost `atomic` block finishes. If an exception occurs in an inner block, the entire transaction is rolled back.
+Nested `atomic()` blocks and `insert_many()` calls use savepoints. A failure rolls back that operation, and the outer block can continue if it catches the exception. An exception that escapes the outermost block rolls back the entire transaction. The transaction commits when the outermost block completes successfully.
 
 ```python
 with db.atomic():

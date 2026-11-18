@@ -869,7 +869,7 @@ class NyanSQLite:
     @contextmanager
     def atomic(self) -> Generator[None, None, None]:
         """トランザクション（ATOMICブロック）を開始します。
-        ネスト（入れ子）された呼び出しも安全に処理されます。
+        入れ子のブロックは SAVEPOINT で保護されます。
 
         Example:
             >>> with db.atomic():
@@ -877,19 +877,21 @@ class NyanSQLite:
             >>>     # ここで例外が発生するとロールバックされます
         """
         with self._lock:
-            if self._conn.in_transaction():
-                yield
-                return
-
-            # Registrations made inside this transaction become visible to
-            # other threads only after the schema commits.
-            self._transaction_state.registry = self._registry.copy()
+            parent_registry = getattr(self._transaction_state, "registry", None)
+            registry = self._current_registry().copy()
+            self._transaction_state.registry = registry
             try:
                 with self._conn.transaction():
                     yield
-                self._registry = self._transaction_state.registry
+                if parent_registry is None:
+                    self._registry = registry
+                else:
+                    parent_registry.update(registry)
             finally:
-                del self._transaction_state.registry
+                if parent_registry is None:
+                    del self._transaction_state.registry
+                else:
+                    self._transaction_state.registry = parent_registry
 
     # ── context manager + info ────────────────────────────────────────── #
 
