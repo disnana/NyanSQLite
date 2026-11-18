@@ -4,6 +4,39 @@ outline: [2, 3]
 
 # CHANGELOG
 
+## [1.1.7] - 2026-11-17
+
+### 🚀 Performance
+- Reused INSERT statements and field encoders for single-row inserts. Sync inserts use SQLite's implicit transaction unless a transaction is already open.
+- In five local Python 3.12 benchmark sets, the median time reduction for 10,000 sync inserts into a WAL database was 30.4% on APSW and 24.2% on sqlite3.
+
+### 🐞 Fixed
+- Finished async transaction rollback under repeated cancellation and kept committed registrations when cancellation arrived during a successful commit.
+- Updated model registration only when the containing transaction commits and rejected concurrent table-name collisions.
+- Preserved the original exception when SQLite had already rolled back the transaction.
+- Applied Pydantic serializers and field exclusions consistently to single and bulk inserts.
+
+### 🧪 Tests and CI
+- Added transaction, registration, and bulk serialization regression tests.
+- Ran Python 3.9 CI on Ubuntu 24.04, which provides supported Python 3.9 builds.
+
+---
+
+## [1.1.6] - 2026-09-27
+
+### 🚀 Performance
+- Streamed `insert_many()` rows to SQLite within the existing transaction, and prepared field serializers and INSERT SQL when registering a model. SQLite's parameter limit applies to each execution of the single-row INSERT.
+- Decoded SQLite tuples directly into the dictionary validated by Pydantic. Normal JSON values use Pydantic Core's parser, with a fallback for values it rejects. Sync and async bulk conversion retain Pydantic validation; the async path runs bulk CPU work off the event loop.
+- Reused prepared statements when callers supply the same keyword filters in different orders. Added optional `statement_cache_size` to both constructors; the backend default is unchanged when omitted.
+- For ordinary models, used Pydantic Core's validator to reduce per-row construction overhead. Models with custom construction, model validators, or other incompatible features keep the constructor path.
+
+### 🧪 Benchmarks and tests
+- Restored sync and async benchmark suites and the result parser; benchmark workflow failures are no longer masked.
+- Added regression tests for large inserts and rollback, column order, Pydantic validators, asynchronous conversion, JSON edge cases, SQL parameter binding, and cache configuration.
+- In local Python 3.12 in-memory runs, the later model-read improvement changed the median for 1,000 rows from 1.974 to 1.671 ms (sync) and 3.044 to 2.626 ms (async). Reordering six keyword filters across 480 sync queries changed 8.964 to 4.955 ms. Async timings vary; fixed-order six-filter queries have a small overhead.
+
+---
+
 ## [1.1.5] - 2026-09-26
 
 ### 🚀 Performance
