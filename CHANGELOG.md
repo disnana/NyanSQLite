@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [1.2.0] - 2026-11-19
+
+### ✨ Added
+- `migrate()` and `plan_migration()` (sync and async; `plan_migration()` also takes `fill=`) bring an existing table in line with a changed model. Added columns run directly; dropping columns, changing types, or adding NOT NULL need `allow_destructive=True`. Each migration runs in one transaction and rolls back on failure.
+- Table rebuilds check that copied values fit the new column types before swapping tables, and keep `rowid` values for tables without an integer primary key.
+- `__nyan_renames__ = {"new": "old"}` on a model renames columns without losing values. `fill={"column": value_or_function(row)}` supplies values for new or converted columns. Both are ignored once the column is migrated, so they can stay in start-up code.
+- `register(model, on_mismatch="migrate")` runs `migrate()` before registering. The default `"error"` keeps the strict behavior.
+- `backup=True` (or a path) copies the database file with `VACUUM INTO` before a migration changes anything. Off by default.
+- `MigrationError`, `MigrationPlan`, and `MigrationStep` are exported.
+
+### 🔧 Changed
+- `SchemaMismatchError` messages now point to `plan_migration()` and `migrate()`. `register()` itself still never edits an existing table.
+
+---
+
 ## [1.1.7] - 2026-11-17
 
 ### 🚀 Performance

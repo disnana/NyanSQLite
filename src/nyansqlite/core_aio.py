@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import os
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from numbers import Integral
 from typing import Any, Optional, TypeVar
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from ._connection import NyanConnection
 from ._insert import can_bind_fields_directly, insert_dumped_rows, insert_statement, model_insert_row
+from ._migrate import MigrationPlan, run_migration
 from ._row_validation import direct_row_validator
 from ._schema import (
     check_fts_schema,
@@ -396,18 +398,31 @@ class NyanSQLiteAIO:
 
     # ── registration ─────────────────────────────────────────────────── #
 
-    async def register(self, model: type[BaseModel]) -> None:
+    async def register(
+        self,
+        model: type[BaseModel],
+        *,
+        on_mismatch: str = "error",
+        allow_destructive: bool = False,
+        backup: bool | str | os.PathLike[str] | None = None,
+        fill: Optional[Mapping[str, Any]] = None,
+    ) -> None:
         """Pydanticモデルを登録し、対応するテーブル、インデックス、FTS5仮想テーブルを作成します。
         Register a Pydantic model and create the corresponding table, indexes, and FTS5 virtual table.
 
         Args:
             model (type[BaseModel]): 登録するPydanticモデルクラス。
                                     The Pydantic model class to register.
+            on_mismatch (str): ``"error"`` (default) raises ``SchemaMismatchError`` when the table differs;
+                               ``"migrate"`` runs ``migrate()`` first.
+            allow_destructive, backup, fill: passed to ``migrate()`` when ``on_mismatch="migrate"``.
 
         Raises:
             TableNameCollisionError: 同じテーブル名を持つ別のモデルが既に登録されている場合に発生します。
                                      Raised if another model with the same table name is already registered.
         """
+        if on_mismatch not in ("error", "migrate"):
+            raise ValueError("on_mismatch must be 'error' or 'migrate'")
         table  = model_to_table_name(model)
         pk     = get_primary_key(model)
         hints  = model_hints(model)
@@ -434,6 +449,11 @@ class NyanSQLiteAIO:
                     )
 
             def _register_all() -> None:
+                if on_mismatch == "migrate":
+                    run_migration(
+                        self._conn, model, allow_destructive=allow_destructive,
+                        dry_run=False, backup=backup, fill=fill,
+                    )
                 with self._conn.transaction():
                     self._conn.execute(model_to_ddl(model))
                     check_table_schema(model, self._conn.execute(f'PRAGMA table_info("{table}")'))
@@ -463,6 +483,39 @@ class NyanSQLiteAIO:
                 fts_table=fts_table, fts_fields=fts_fields,
             )
 
+
+    async def plan_migration(
+        self, model: type[BaseModel], *, fill: Optional[Mapping[str, Any]] = None
+    ) -> MigrationPlan:
+        """Return the migration steps for ``model`` without changing the database."""
+        return await self.migrate(model, dry_run=True, fill=fill)
+
+    async def migrate(
+        self,
+        model: type[BaseModel],
+        *,
+        allow_destructive: bool = False,
+        dry_run: bool = False,
+        backup: bool | str | os.PathLike[str] | None = None,
+        fill: Optional[Mapping[str, Any]] = None,
+    ) -> MigrationPlan:
+        """Bring an existing table in line with ``model``; call ``register()`` afterwards.
+
+        Additive changes and column renames run directly. Dropping columns, changing types, or
+        adding NOT NULL need ``allow_destructive=True``. Everything runs in one transaction and
+        rolls back on failure.
+
+        What types cannot tell is stated by the caller: ``__nyan_renames__ = {"new": "old"}`` on
+        the model, and ``fill={"column": value_or_function(row)}`` for new or converted columns.
+        ``backup=True`` (or a path) copies the database file with ``VACUUM INTO`` first.
+        """
+        async with self._write_context():
+            return await self._run_db_call(
+                lambda: run_migration(
+                    self._conn, model, allow_destructive=allow_destructive,
+                    dry_run=dry_run, backup=backup, fill=fill,
+                )
+            )
 
     def _current_registry(self) -> dict[type[BaseModel], _Meta]:
         if self._transaction_registry is not None and self._lock_owner is asyncio.current_task():

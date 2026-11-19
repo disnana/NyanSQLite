@@ -27,6 +27,7 @@ class NyanConnection:
 
     def __init__(self, path: str, wal: bool = True, statement_cache_size: int | None = None):
         self._savepoint_counter = 0
+        self.path = path
         if statement_cache_size is not None:
             if isinstance(statement_cache_size, bool) or not isinstance(statement_cache_size, Integral):
                 raise ValueError("statement_cache_size must be a non-negative integer")
