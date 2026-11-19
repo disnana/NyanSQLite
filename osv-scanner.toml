@@ -1,0 +1,37 @@
+# Python <3.11 resolutions in uv.lock cannot move to patched releases (fixes need Python 3.11+).
+# They are dev/optional dependencies only; Python 3.11+ resolves patched versions.
+
+[[PackageOverrides]]
+name = "filelock"
+version = "3.19.1"
+ecosystem = "PyPI"
+ignore = true
+reason = "Python <3.11-only dev/optional resolution; patched versions require Python 3.11+"
+
+[[PackageOverrides]]
+name = "filelock"
+version = "4.1.0"
+ecosystem = "PyPI"
+ignore = true
+reason = "Python <3.11-only dev/optional resolution; patched versions require Python 3.11+"
+
+[[PackageOverrides]]
+name = "orjson"
+version = "3.11.5"
+ecosystem = "PyPI"
+ignore = true
+reason = "Python <3.11-only dev/optional resolution; patched versions require Python 3.11+"
+
+[[PackageOverrides]]
+name = "pytest"
+version = "8.4.2"
+ecosystem = "PyPI"
+ignore = true
+reason = "Python <3.11-only dev/optional resolution; patched versions require Python 3.11+"
+
+[[PackageOverrides]]
+name = "virtualenv"
+version = "21.14.5"
+ecosystem = "PyPI"
+ignore = true
+reason = "Python <3.11-only dev/optional resolution; patched versions require Python 3.11+"
