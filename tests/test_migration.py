@@ -358,12 +358,18 @@ def test_migrate_inside_atomic_rolls_back_with_outer_transaction(seeded):
         age: int
         email: str = ""
 
+    def migrate_then_abort(db):
+        with db.atomic():
+            db.migrate(User)
+            raise RuntimeError("abort")
+
     before = table_sql(seeded)
-    with NyanSQLite(seeded) as db:
+    db = NyanSQLite(seeded)
+    try:
         with pytest.raises(RuntimeError):
-            with db.atomic():
-                db.migrate(User)
-                raise RuntimeError("abort")
+            migrate_then_abort(db)
+    finally:
+        db.close()
     assert table_sql(seeded) == before
 
 
