@@ -1,11 +1,9 @@
 name: SonarQube Cloud analysis
 
+# 無効化中: SONAR_TOKEN が SonarQube Cloud に拒否されるため自動実行を停止。
+# 再開する場合は有効なトークンを設定し、push / pull_request トリガーを戻す。
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 concurrency:
   group: sonarqube-${{ github.ref }}

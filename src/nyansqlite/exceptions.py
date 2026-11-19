@@ -27,6 +27,11 @@ class SchemaMismatchError(NyanSQLiteError):
 
     pass
 
+class MigrationError(NyanSQLiteError):
+    """Raised when a migration is blocked, needs ``allow_destructive=True``, or fails and is rolled back."""
+
+    pass
+
 class QueryValidationError(NyanSQLiteError):
     """クエリパラメータの型変換に失敗した場合にスローされます.
 

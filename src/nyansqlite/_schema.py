@@ -49,9 +49,13 @@ def model_hints(model: type[BaseModel]) -> dict[str, Any]:
 
 # ── DDL ────────────────────────────────────────────────────────────────── #
 
-def model_to_ddl(model: type[BaseModel]) -> str:
-    """Generate ``CREATE TABLE IF NOT EXISTS …`` DDL."""
-    table = model_to_table_name(model)
+def model_to_ddl(model: type[BaseModel], table: Optional[str] = None) -> str:
+    """Generate ``CREATE TABLE IF NOT EXISTS …`` DDL.
+
+    ``table`` overrides the table name; ``migrate()`` uses it to build a replacement table.
+    """
+    table = table or model_to_table_name(model)
+    quote_identifier(table)
     pk    = get_primary_key(model)
     hints = model_hints(model)
     for field_name in hints:
@@ -73,8 +77,10 @@ def model_to_ddl(model: type[BaseModel]) -> str:
     return f'CREATE TABLE IF NOT EXISTS "{table}" (\n  {col_defs}\n)'
 
 
-def check_table_schema(model: type[BaseModel], columns: list[dict[str, Any]]) -> None:
-    """Fail early when an existing table cannot represent the model."""
+def diff_table(
+    model: type[BaseModel], columns: list[dict[str, Any]]
+) -> tuple[list[str], list[str], list[str]]:
+    """Compare an existing table with the model: ``(missing, extra, incompatible)``."""
     hints = model_hints(model)
     pk = get_primary_key(model)
     actual = {column["name"]: column for column in columns}
@@ -95,27 +101,46 @@ def check_table_schema(model: type[BaseModel], columns: list[dict[str, Any]]) ->
             or bool(column["notnull"]) != expected_not_null
         ):
             incompatible.append(name)
+    return missing, extra, incompatible
+
+
+def check_table_schema(model: type[BaseModel], columns: list[dict[str, Any]]) -> None:
+    """Fail early when an existing table cannot represent the model."""
+    missing, extra, incompatible = diff_table(model, columns)
     if missing or extra or incompatible:
         raise SchemaMismatchError(
             f"Existing table '{model_to_table_name(model)}' differs from model {model.__name__}: "
             f"missing columns={missing}, extra columns={extra}, "
             f"incompatible columns={incompatible}. Migrate the table before register()."
+            " Use db.plan_migration(Model) to preview the steps and db.migrate(Model) to apply them,"
+            " or pass on_mismatch='migrate' to register()."
         )
+
+
+def fts_mismatch(
+    model: type[BaseModel], existing_sql: str | None, columns: list[dict[str, Any]]
+) -> bool:
+    """Whether an existing FTS table disagrees with the model's ``Searchable`` fields."""
+    expected = [name for name, ann in model_hints(model).items() if is_searchable(ann)]
+    if existing_sql is None:
+        return False  # register() will create FTS5 when the model needs it.
+    actual = [column["name"] for column in columns]
+    return not expected or "using fts5" not in existing_sql.lower() or actual != expected
 
 
 def check_fts_schema(
     model: type[BaseModel], existing_sql: str | None, columns: list[dict[str, Any]]
 ) -> None:
     """Reject an FTS definition left behind by a changed Searchable annotation."""
-    expected = [name for name, ann in model_hints(model).items() if is_searchable(ann)]
-    if existing_sql is None:
-        return  # register() will create FTS5 when the model needs it.
-    actual = [column["name"] for column in columns]
-    if not expected or "using fts5" not in existing_sql.lower() or actual != expected:
+    if fts_mismatch(model, existing_sql, columns):
+        expected = [name for name, ann in model_hints(model).items() if is_searchable(ann)]
+        actual = [column["name"] for column in columns]
         raise SchemaMismatchError(
             f"Existing FTS table '{model_to_table_name(model)}_fts' differs from "
             f"model {model.__name__}: searchable columns={actual}, expected={expected}. "
             "Migrate the FTS table and triggers before register()."
+            " Use db.plan_migration(Model) to preview the steps and db.migrate(Model) to apply them,"
+            " or pass on_mismatch='migrate' to register()."
         )
 
 

@@ -157,6 +157,10 @@ jobs:
         severity: 'CRITICAL,HIGH,MEDIUM'
         exit-code: '1'
 
+    - name: Show Trivy findings (table)
+      if: always()
+      run: trivy convert --format table --severity CRITICAL,HIGH,MEDIUM trivy-results.json || true
+
     # trivy convertでJSONからSARIFに変換（2回目のスキャン不要）
     - name: Convert Trivy JSON to SARIF
       if: always()
@@ -213,6 +217,7 @@ jobs:
         grype dir:. \
           -o json=grype-results.json \
           -o sarif=grype-results.sarif \
+          -o table \
           --fail-on medium
 
     - name: Upload Grype SARIF to GitHub Security Tab

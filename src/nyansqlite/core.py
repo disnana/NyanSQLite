@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from numbers import Integral
 from typing import Any, Optional, TypeVar
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 
 from ._connection import NyanConnection
 from ._insert import can_bind_fields_directly, insert_dumped_rows, insert_statement, model_insert_row
+from ._migrate import MigrationPlan, run_migration
 from ._row_validation import direct_row_validator
 from ._schema import (
     check_fts_schema,
@@ -365,15 +367,29 @@ class NyanSQLite:
 
     # ── registration ─────────────────────────────────────────────────── #
 
-    def register(self, model: type[BaseModel]) -> None:
+    def register(
+        self,
+        model: type[BaseModel],
+        *,
+        on_mismatch: str = "error",
+        allow_destructive: bool = False,
+        backup: bool | str | os.PathLike[str] | None = None,
+        fill: Optional[Mapping[str, Any]] = None,
+    ) -> None:
         """Pydanticモデルを登録し、対応するテーブル、インデックス、FTS5仮想テーブルを作成します。
 
         Args:
             model (type[BaseModel]): 登録するPydanticモデルクラス。
+            on_mismatch (str): 既存テーブルとモデルが食い違うときの扱い。
+                ``"error"``(既定)は ``SchemaMismatchError`` で止まります。
+                ``"migrate"`` は登録の前に ``migrate()`` を実行します。
+            allow_destructive, backup, fill: ``on_mismatch="migrate"`` のときに ``migrate()`` へ渡されます。
 
         Raises:
             TableNameCollisionError: 同じテーブル名を持つ別のモデルが既に登録されている場合に発生します。
         """
+        if on_mismatch not in ("error", "migrate"):
+            raise ValueError("on_mismatch must be 'error' or 'migrate'")
         table  = model_to_table_name(model)
         pk     = get_primary_key(model)
         hints  = model_hints(model)
@@ -389,6 +405,12 @@ class NyanSQLite:
                         f"これはCamelCaseのバリアント (例: 'UserAuth' と 'User_Auth') で発生する可能性があります。 "
                         f"明示的な __tablename__ のオーバーライドを使用するか、いずれかのモデルの名前を変更してください。"
                     )
+
+            if on_mismatch == "migrate":
+                run_migration(
+                    self._conn, model, allow_destructive=allow_destructive,
+                    dry_run=False, backup=backup, fill=fill,
+                )
 
             with self._conn.transaction():
                 self._conn.execute(model_to_ddl(model))
@@ -422,6 +444,56 @@ class NyanSQLite:
                 table=table, pk=pk, hints=hints, model=model,
                 strict_deserialization=self._strict_deserialization,
                 fts_table=fts_table, fts_fields=fts_fields,
+            )
+
+    def plan_migration(
+        self, model: type[BaseModel], *, fill: Optional[Mapping[str, Any]] = None
+    ) -> MigrationPlan:
+        """既存テーブルをモデルに合わせるための手順を、DBを変更せずに返します。
+
+        Return the steps needed to bring an existing table in line with ``model`` without
+        changing the database. Print the result or read ``plan.sql`` to review it.
+        ``fill`` is the same mapping you would pass to ``migrate()``.
+        """
+        return self.migrate(model, dry_run=True, fill=fill)
+
+    def migrate(
+        self,
+        model: type[BaseModel],
+        *,
+        allow_destructive: bool = False,
+        dry_run: bool = False,
+        backup: bool | str | os.PathLike[str] | None = None,
+        fill: Optional[Mapping[str, Any]] = None,
+    ) -> MigrationPlan:
+        """既存テーブルをモデルの定義に合わせます。実行後に ``register()`` を呼んでください。
+
+        カラム追加・カラム名の変更のようにデータを失わない変更は、そのまま実行されます。
+        カラム削除・型変更・NOT NULLの追加は ``allow_destructive=True`` が必要です。
+        すべての変更は1つのトランザクションで実行され、失敗すると元に戻ります。
+
+        型から推測できない部分は利用者が指定します。
+
+        * カラム名の変更: モデルに ``__nyan_renames__ = {"新しい名前": "古い名前"}`` を書く。
+        * 新しいカラムや型を変えるカラムの値: ``fill={"カラム名": 値 または 関数(row)}``。
+          関数には既存の行(カラム名→保存されている値の辞書)が渡されます。
+
+        Args:
+            model: 合わせる先のPydanticモデル。
+            allow_destructive: データが変わる・失われる可能性のある変更を許可します。
+            dry_run: Trueの場合は計画だけを返し、DBは変更しません。
+            backup: Trueで ``<DBファイル>.bak-<日時>`` に、文字列/パスでその場所に、
+                変更の前にDBをコピーします(``VACUUM INTO``)。既定は行いません。
+            fill: 上記のとおり、カラムごとの値の指定。すでに移行済みのカラムは無視されるので、
+                起動時のコードに残しておいても再実行できます。
+
+        Raises:
+            MigrationError: 実行できない変更がある、許可が足りない、または途中で失敗した場合。
+        """
+        with self._lock:
+            return run_migration(
+                self._conn, model, allow_destructive=allow_destructive,
+                dry_run=dry_run, backup=backup, fill=fill,
             )
 
     def _current_registry(self) -> dict[type[BaseModel], _Meta]:

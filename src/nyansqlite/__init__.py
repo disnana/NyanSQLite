@@ -1,8 +1,10 @@
 from ._markers import CompositeIndex, Indexed, Searchable, UniqueIndexed
+from ._migrate import MigrationPlan, MigrationStep
 from .core import NyanSQLite
 from .core_aio import NyanSQLiteAIO
 from .exceptions import (
     FieldNotFoundError,
+    MigrationError,
     ModelNotRegisteredError,
     QueryValidationError,
     SchemaMismatchError,
@@ -23,5 +25,8 @@ __all__ = [
     "TableNameCollisionError",
     "QueryValidationError",
     "SchemaMismatchError",
+    "MigrationError",
+    "MigrationPlan",
+    "MigrationStep",
 ]
-__version__ = "1.1.7"
+__version__ = "1.2.0"

@@ -348,6 +348,21 @@ with NyanSQLite("app.db") as db:
     # 自動的にcloseされる
 ```
 
+### 🔄 スキーマの移行
+
+モデルにフィールドを足すと、`register()` は `SchemaMismatchError` で止まります。既存テーブルは自動では書き換えません。`migrate()` で明示的に合わせてください。
+
+```python
+print(db.plan_migration(User))   # 手順の確認(DBは変更しない)
+db.migrate(User)                 # カラム追加などデータを失わない変更を実行
+db.migrate(User, allow_destructive=True)  # カラム削除・型変更も許可
+db.register(User)
+```
+
+型から読み取れない部分は自分で指定します。カラム名の変更はモデルの `__nyan_renames__ = {"新": "旧"}`、新しいカラムや型を変えるカラムの値は `fill={"列": 値または関数(row)}` です。`db.register(User, on_mismatch="migrate")` なら登録時に自動で移行し、`backup=True` で変更前にDBをコピーします(既定はなし)。
+
+すべて1つのトランザクションで実行され、失敗すると元に戻ります。
+
 ### 🧹 メンテナンス
 
 ```python
@@ -604,6 +619,21 @@ try:
     db.register(User_Auth)  # TableNameCollisionError
 except TableNameCollisionError as e:
     print(f"Table name collision: {e}")
+
+### 🔄 Schema migration
+
+Adding a field makes `register()` raise `SchemaMismatchError`; existing tables are never rewritten automatically. Use `migrate()` to bring them in line explicitly.
+
+```python
+print(db.plan_migration(User))   # preview the steps (no changes)
+db.migrate(User)                 # apply data-preserving changes such as adding columns
+db.migrate(User, allow_destructive=True)  # also allow dropping columns and type changes
+db.register(User)
+```
+
+State what the types cannot tell yourself: `__nyan_renames__ = {"new": "old"}` on the model for renamed columns, and `fill={"column": value_or_function(row)}` for new or converted columns. `db.register(User, on_mismatch="migrate")` migrates during registration, and `backup=True` copies the database before any change (off by default).
+
+Everything runs in one transaction and rolls back on failure.
 
 ### 🔗 Resources
 
